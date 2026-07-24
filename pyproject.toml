@@ -31,6 +31,8 @@ transcribe = [
 frames = ["scenedetect>=0.7", "Pillow>=12", "imagehash>=4.3.2"]
 # step 5: vision captioning
 vision = ["openai>=2.44"]
+# Phase E: MCP interface layer (Agent-callable server)
+mcp = ["mcp>=1.0"]
 dev = ["pytest>=8"]
 
 [project.scripts]

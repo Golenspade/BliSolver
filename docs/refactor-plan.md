@@ -10,6 +10,10 @@
 >   provenance 落地（segments 带 source/confidence）+ ASR 幻觉检测 + OCR 异源交叉验证
 >   （BV1LD7U65Ew2: ASR 67% 重复幻觉，69 个窗口被 OCR 证伪，source_reason 注记诊断）。
 > 同源择优接口预留（无多源视频，单测覆盖）。
+> 阶段 E（MCP 接口层）已完成并端到端验证：
+>   probe_video / extract_transcript(异步 job) / get_transcript / get_timeline / get_visual_context
+>   五工具全部调通（BV1dSKJ6wEVz：11s 完成，human-sub 86 段带 provenance）。
+> 剩余阶段 F：多视频采样定标 quality 门控阈值（实测发现 punct_density 对 AI 字幕误拒）。
 > 所有判定均有真实代码实测支撑。
 > 本计划基于**真实代码实测**，非 README 假设。所有“保留/替换”判定均有实证支撑。
 
@@ -228,9 +232,8 @@ bundle.md + bundle.json（schema 1.1）+ MCP 可查
 3. ✅ **阶段 B-2**：schema 1.0→1.1（加 Segment.source/confidence、Bundle.ocr）— **已完成**
 4. ✅ **阶段 C**：移植 `ocr.py` + `detect_hardsubs.py`（子进程隔离）— **已完成并端到端验证**
 5. ✅ **阶段 D**：`fuse.py` 多源融合（provenance 落地 + ASR 幻觉检测 + OCR 交叉验证 + 同源择优接口）— **已完成**
-5. ✅ **阶段 D**：`fuse.py` 多源融合 — **已完成**
-6. **阶段 E**：MCP 接口层
-7. **阶段 F**：多视频采样，定标 quality 门控阈值（尤其是 tier-1 时长区间）
+6. ✅ **阶段 E**：MCP 接口层（probe_video/extract_transcript/get_transcript/get_timeline/get_visual_context）— **已完成并端到端验证**
+7. **阶段 F**：多视频采样，定标 quality 门控阈值（尤其是 tier-1 时长区间 + punct_density 对 AI 字幕误拒）
 
 每个阶段都应像阶段 A 一样：先用真实视频端到端验证，再固化到计划。
 

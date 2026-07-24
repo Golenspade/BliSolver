@@ -92,6 +92,8 @@ def parse_args(argv=None) -> argparse.Namespace:
     probe_cmd = sub.add_parser("probe", help="cheap pre-flight metadata probe, no media")
     probe_cmd.add_argument("url")
 
+    sub.add_parser("mcp", help="run the MCP server over stdio (Phase E Agent interface)")
+
     return p.parse_args(argv)
 
 
@@ -368,6 +370,9 @@ def main(argv=None) -> int:
     args = parse_args(argv)
     if args.command == "probe":
         return _run_probe(args)
+    if args.command == "mcp":
+        from .mcp import main as mcp_main
+        return mcp_main()
     return _run_ingest(args)
 
 
