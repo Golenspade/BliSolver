@@ -111,7 +111,8 @@ class BilibiliProvider:
                 source_reason=f"no usable subtitle ({sub.reason})",
                 language=None, segments=[],
             )
-        gate = evaluate(sub.segments, float(info.get("duration") or 0), settings.quality)
+        gate = evaluate(sub.segments, float(info.get("duration") or 0), settings.quality,
+                       source=sub.source)
         if gate.passed:
             return SubtitleOutcome(
                 accepted=True, source=sub.source,
@@ -120,7 +121,7 @@ class BilibiliProvider:
             )
         return SubtitleOutcome(
             accepted=False, source=None,
-            source_reason=f"subtitle rejected ({describe_failure(gate, settings.quality)})",
+            source_reason=f"subtitle rejected ({describe_failure(gate, settings.quality, source=sub.source)})",
             language=None, segments=[], quality_gate=gate,
         )
 

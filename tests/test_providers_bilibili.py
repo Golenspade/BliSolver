@@ -94,7 +94,7 @@ def test_fetch_subtitle_accepts_when_gate_passes(monkeypatch):
     monkeypatch.setattr(biliprov, "subtitle_probe",
         lambda info, c, s, **k: SubtitleResult(True, "auto-sub", "ai-zh", segments=segs, reason="ok"))
     monkeypatch.setattr(biliprov, "evaluate",
-        lambda seg, dur, q: QualityGate(passed=True, punct_density=1.0, dup_ratio=0.0, nonzh_ratio=0.0, cps=5.0))
+        lambda seg, dur, q, **kw: QualityGate(passed=True, punct_density=1.0, dup_ratio=0.0, nonzh_ratio=0.0, cps=5.0))
     out = p.fetch_subtitle(_canonical(), Settings(), None)
     assert out.accepted is True and out.source == "auto-sub"
     assert out.language == "zh" and out.quality_gate.passed and out.segments == segs
@@ -112,7 +112,7 @@ def test_fetch_subtitle_rejects_when_gate_fails_and_carries_gate(monkeypatch):
     monkeypatch.setattr(biliprov, "subtitle_probe",
         lambda info, c, s, **k: SubtitleResult(True, "auto-sub", "ai-zh",
             segments=[Segment(start=0.0, end=1.0, text="x")], reason="ok"))
-    monkeypatch.setattr(biliprov, "evaluate", lambda seg, dur, q: failed)
+    monkeypatch.setattr(biliprov, "evaluate", lambda seg, dur, q, **kw: failed)
     out = p.fetch_subtitle(_canonical(), Settings(), None)
     assert out.accepted is False and out.source is None
     assert out.quality_gate is failed and "rejected" in out.source_reason

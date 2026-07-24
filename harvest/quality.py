@@ -18,8 +18,21 @@ def _is_cjk(ch: str) -> bool:
 
 
 def evaluate(
-    segments: list[Segment], duration_s: float, thresholds: QualityThresholds
+    segments: list[Segment],
+    duration_s: float,
+    thresholds: QualityThresholds,
+    *,
+    source: str | None = None,
 ) -> QualityGate:
+    """Quality gate. Any ONE tripping metric rejects the sub -> Whisper. Not a weighted score.
+
+    `source` ("human-sub"/"auto-sub") scopes which metrics apply: punct_density is only
+    meaningful for human-CC (ASR/auto-sub captions lack punctuation by default — measuring it
+    on them flags source-TYPE not quality; across Phase F sampling every good AND bad ai-zh
+    scored 0.0-0.011, all wrongly rejected at 0.04). For auto-sub we skip punct_density and rely
+    on dup_ratio/nonzh_ratio/cps, which DO separate good AI (content-correct) from bad
+    (looping/music-symbol) — verified on 9 real videos. The metric is still REPORTED so the
+    gate stays transparent; it just doesn't trip the verdict for auto-sub."""
     text = "".join(s.text for s in segments)
     total = len(text)
 
@@ -36,8 +49,13 @@ def evaluate(
 
     cps = total / duration_s if duration_s and duration_s > 0 else None
 
+    punct_trips = punct_density < thresholds.punct_density_min
+    if source == "auto-sub":
+        # ASR captions are punctuation-less by construction; the metric is reported but doesn't
+        # trip the verdict (it can't tell good AI from bad — both score ~0).
+        punct_trips = False
     tripped = (
-        punct_density < thresholds.punct_density_min
+        punct_trips
         or dup_ratio > thresholds.dup_ratio_max
         or nonzh_ratio > thresholds.nonzh_ratio_max
         or (cps is not None and (cps < thresholds.cps_min or cps > thresholds.cps_max))
@@ -52,10 +70,11 @@ def evaluate(
     )
 
 
-def describe_failure(gate: QualityGate, t: QualityThresholds) -> str:
-    """Human-readable list of which metric(s) tripped, for the D2 bundle.md header."""
+def describe_failure(gate: QualityGate, t: QualityThresholds, *, source: str | None = None) -> str:
+    """Human-readable list of which metric(s) tripped, for the D2 bundle.md header.
+    Mirrors evaluate()'s source scoping: punct_density is not a trip cause for auto-sub."""
     fails = []
-    if gate.punct_density < t.punct_density_min:
+    if source != "auto-sub" and gate.punct_density < t.punct_density_min:
         fails.append(f"punct_density {gate.punct_density} < {t.punct_density_min}")
     if gate.dup_ratio > t.dup_ratio_max:
         fails.append(f"dup_ratio {gate.dup_ratio} > {t.dup_ratio_max}")

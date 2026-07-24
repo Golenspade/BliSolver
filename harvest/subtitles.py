@@ -18,9 +18,15 @@ from .config import REFERER, Settings
 from .resolve import Canonical
 from .schema import Segment
 
-# Original-language zh keys we accept, in preference order. Human subs (info["subtitles"])
-# outrank AI captions (info["automatic_captions"]); within each we prefer simplified zh.
-_ZH_KEYS = ("zh-Hans", "zh-CN", "zh", "ai-zh")
+# Original-language zh keys we accept, in preference order. Split by SOURCE TYPE because the
+# quality gate is source-aware (Phase F: punct_density is skipped for auto-sub — ASR captions
+# are punctuation-less by construction, so the metric only flags source-TYPE, not quality).
+# bilibili delivers ai-zh inside the `subtitles` field (not `automatic_captions` like YouTube),
+# so the field is NOT a reliable source signal — the key name is. `ai-*` is ALWAYS auto-sub.
+_HUMAN_ZH_KEYS = ("zh-Hans", "zh-CN", "zh")   # human-authored original-language zh
+_AUTO_ZH_KEYS = ("ai-zh",)                     # ASR-transcribed zh (bilibili ai-zh)
+# Kept for back-compat with anything that imported the combined tuple; new code uses the split.
+_ZH_KEYS = _HUMAN_ZH_KEYS + _AUTO_ZH_KEYS
 
 
 @dataclass
@@ -116,14 +122,20 @@ def extract_info(url: str, settings: Settings) -> dict:
 
 
 def _pick_track(info: dict) -> tuple[str, str, list] | None:
-    """Return (source_label, lang_key, formats) for the best original-zh track, or None."""
+    """Return (source_label, lang_key, formats) for the best original-zh track, or None.
+
+    Human-CC outranks ASR auto-sub. bilibili delivers ai-zh inside the `subtitles` field (not
+    `automatic_captions`), so we DON'T use the field as the source signal — the KEY name decides:
+    `ai-*` is always auto-sub regardless of which yt-dlp field carried it."""
     human = info.get("subtitles") or {}
     auto = info.get("automatic_captions") or {}
-    for key in _ZH_KEYS:
+    for key in _HUMAN_ZH_KEYS:
         if key in human:
             return "human-sub", key, human[key]
-    for key in _ZH_KEYS:
-        if key in auto:
+    for key in _AUTO_ZH_KEYS:
+        if key in human:                  # bilibili: ai-zh lives in `subtitles`
+            return "auto-sub", key, human[key]
+        if key in auto:                    # YouTube: ai-zh lives in `automatic_captions`
             return "auto-sub", key, auto[key]
     return None
 
