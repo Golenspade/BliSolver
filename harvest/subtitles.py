@@ -100,8 +100,18 @@ def ydl_opts(
 
 def extract_info(url: str, settings: Settings) -> dict:
     """Fetch yt-dlp info for a specific part URL (no media). Fails loud per D11 if the cookie
-    source itself can't be read (yt-dlp raises a clear DownloadError)."""
-    with yt_dlp.YoutubeDL(ydl_opts(settings)) as ydl:
+    source itself can't be read (yt-dlp raises a clear DownloadError).
+
+    IMPORTANT: bilibili's extractor fetches subtitles LAZILY — it only populates
+    `info["subtitles"]` when `writesubtitles`/`writeautomaticsub` are requested. Without these
+    flags the subtitle list comes back `{}` even when tracks exist (verified on BV1dSKJ6wEVz:
+    `--list-subs` shows zh+ai-zh, but plain extract_info returns {}). This is subtitle METADATA
+    extraction only — `skip_download` stays True, so NO subtitle FILE is written to disk. The
+    download path (transcribe/frames) uses ydl_opts() WITHOUT these flags, so it is unaffected."""
+    opts = ydl_opts(settings)
+    opts["writesubtitles"] = True
+    opts["writeautomaticsub"] = True
+    with yt_dlp.YoutubeDL(opts) as ydl:
         return ydl.extract_info(url, download=False)
 
 
@@ -119,16 +129,24 @@ def _pick_track(info: dict) -> tuple[str, str, list] | None:
 
 
 def _download_track(formats: list, settings: Settings) -> tuple[str, str]:
-    """Fetch a subtitle track's raw text. Returns (text, ext). Prefers json(bcc)/srt formats."""
+    """Fetch a subtitle track's raw text. Returns (text, ext). Prefers json(bcc)/srt/vtt formats.
+
+    Two delivery shapes: yt-dlp embeds the body inline as `data` (bilibili does this — no url
+    to fetch), OR it provides a `url` to urlopen (YouTube timed-text). `data` wins when present;
+    the url path falls back to a YoutubeDL.urlopen with the shared cookie jar."""
     ordered = sorted(formats, key=lambda f: 0 if f.get("ext") in ("json", "srt", "vtt") else 1)
-    with yt_dlp.YoutubeDL(ydl_opts(settings)) as ydl:
-        for f in ordered:
-            url = f.get("url")
-            if not url:
-                continue
+    for f in ordered:
+        ext = f.get("ext") or ""
+        data = f.get("data")
+        if data:
+            return data, ext
+        url = f.get("url")
+        if not url:
+            continue
+        with yt_dlp.YoutubeDL(ydl_opts(settings)) as ydl:
             raw = ydl.urlopen(url).read().decode("utf-8", "replace")
-            return raw, f.get("ext") or ""
-    raise ValueError("subtitle track had no fetchable url")
+        return raw, ext
+    raise ValueError("subtitle track had no fetchable url or inline data")
 
 
 def parse_bcc(text: str) -> list[Segment]:
