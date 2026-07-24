@@ -7,7 +7,6 @@ from harvest.fuse import (
     cross_verify_with_ocr,
     detect_hallucination,
     fuse,
-    select_same_source,
 )
 from harvest.schema import Segment, Transcript
 
@@ -127,43 +126,8 @@ def test_fuse_without_ocr_skips_cross_verification():
     assert "cross-source" not in (res.transcript.source_reason or "")
 
 
-# --- same-source selection (§5.3, synthetic) -----------------------------------------
-
-def test_select_same_source_no_candidates_passthrough():
-    t = _whisper_transcript(["a", "b", "c"])
-    assert select_same_source(t, []) is t  # identity passthrough
-
-
-def test_select_same_source_merges_overlapping_similar_keeps_higher_confidence():
-    # primary = whisper (conf None->0.0), candidate = human-sub (conf 1.0). Same text, overlap
-    # -> keep the CC cue (higher confidence), union the time window.
-    primary = Transcript(
-        source="whisper", source_reason="r",
-        segments=[Segment(start=0, end=2, text="你好世界", source="whisper")],
-    )
-    cand = Transcript(
-        source="human-sub", source_reason="cc",
-        segments=[Segment(start=1, end=3, text="你好世界", source="human-sub", confidence=1.0)],
-    )
-    merged = select_same_source(primary, [cand])
-    assert len(merged.segments) == 1
-    seg = merged.segments[0]
-    assert seg.source == "human-sub"  # CC won the confidence tie
-    assert seg.confidence == 1.0
-    assert seg.start == 0 and seg.end == 3  # union window
-
-
-def test_select_same_source_keeps_dissimilar_overlapping_cues():
-    # Overlap but different text -> both kept (one may be the body, the other a supplement).
-    primary = Transcript(
-        source="whisper", source_reason="r",
-        segments=[Segment(start=0, end=2, text="今天看代码", source="whisper")],
-    )
-    cand = Transcript(
-        source="human-sub", source_reason="cc",
-        segments=[Segment(start=1, end=3, text="另外补充一点", source="human-sub", confidence=1.0)],
-    )
-    merged = select_same_source(primary, [cand])
-    assert len(merged.segments) == 2
-    sources = {s.source for s in merged.segments}
-    assert sources == {"whisper", "human-sub"}
+# same-source selection (§5.3) was DROPPED after real multi-source testing showed its 0.80
+# similarity threshold rejected 95% of overlapping cues (CC is long-merged, AI is short-
+# chopped, granularity misaligned) — the quality gate already does source selection
+# (gate-passing source wins); a second fuse-layer merge had negative ROI. See fuse.py
+# module docstring for the full rationale and commit history for the removed code.

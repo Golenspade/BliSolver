@@ -9,7 +9,7 @@
 > 阶段 D（fuse.py 多源融合）已完成并端到端验证：
 >   provenance 落地（segments 带 source/confidence）+ ASR 幻觉检测 + OCR 异源交叉验证
 >   （BV1LD7U65Ew2: ASR 67% 重复幻觉，69 个窗口被 OCR 证伪，source_reason 注记诊断）。
-> 同源择优接口预留（无多源视频，单测覆盖）。
+> 完整 7 阶段重构已完成；同源择优（§5.3）已实测删除（真实双源场景粒度不对齐、质量门控已做源选择、该层 ROI 为负）。
 > 阶段 E（MCP 接口层）已完成并端到端验证：
 >   probe_video / extract_transcript(异步 job) / get_transcript / get_timeline / get_visual_context
 >   五工具全部调通（BV1dSKJ6wEVz：11s 完成，human-sub 86 段带 provenance）。
@@ -183,7 +183,7 @@ SubtitleExtractor 让 ASR 跑在**独立子进程**，注释明说"以隔离 Fas
 
 | 源对 | 关系 | 融合策略 |
 |---|---|---|
-| CC ↔ AI 字幕 | 同源择优（都是语音对齐文本） | 时间重叠 + 置信度加权，择优或拼接 |
+| CC ↔ AI 字幕 | 同源择优 | ~~时间重叠 + 置信度加权，择优或拼接~~ **已删除**：真实双源测试（BV1dSKJ6wEVz）显示粒度不对齐（CC 长整句 vs AI 短词），0.80 相似阈值 95% 拒真；质量门控已做源选择，无需第二层。 |
 | CC/ASR ↔ OCR | **异源插入**（画面文字 ≠ 语音） | OCR 作为独立 track，不合并进 transcript，按时间轴对齐 |
 | ASR 自身多段 | 去重/平滑 | 已由 whisper segment 处理 |
 
@@ -193,7 +193,14 @@ SubtitleExtractor 让 ASR 跑在**独立子进程**，注释明说"以隔离 Fas
 
 ### 5.3 融合算法（初版，可迭代）
 
-1. CC/AI/ASR 按 start 时间排序合并；
+> **阶段 F 删除注**：下方第 1-2 步描述的 CC/AI 同源择优已实现后又删除（见上表）。
+> 删除原因：真实多源场景罕见、质量门控已择优、该合并层对下游 chunking 产生副作用。
+> 当前 fuse 只保留：
+>   - ASR 幻觉检测（whisper 重复模式）
+>   - OCR 异源交叉验证（OCR track 独立）
+> 其他部分保留作为历史设计记录。
+
+1. CC/AI 按 start 时间排序合并；
 2. 时间重叠段：若文本相似度 > 阈值 → 择置信度高者；不相似 → 都保留（可能一个是正文本一个是补充）；
 3. OCR 段单独成 track，`merge.py` 的 `chunk()` 已支持按 frame boundaries 对齐，OCR 段可复用同一套 chunking。
 
@@ -245,7 +252,7 @@ bundle.md + bundle.json（schema 1.1）+ MCP 可查
 2. ✅ **阶段 B-1**：删 `player_api.part_segments` 死代码 + 默认 cookie browser 改 chrome — **已完成**
 3. ✅ **阶段 B-2**：schema 1.0→1.1（加 Segment.source/confidence、Bundle.ocr）— **已完成**
 4. ✅ **阶段 C**：移植 `ocr.py` + `detect_hardsubs.py`（子进程隔离）— **已完成并端到端验证**
-5. ✅ **阶段 D**：`fuse.py` 多源融合（provenance 落地 + ASR 幻觉检测 + OCR 交叉验证 + 同源择优接口）— **已完成**
+5. ✅ **阶段 D**：`fuse.py` 多源融合（provenance 落地 + ASR 幻觉检测 + OCR 交叉验证）— **已完成**
 6. ✅ **阶段 E**：MCP 接口层（probe_video/extract_transcript/get_transcript/get_timeline/get_visual_context）— **已完成并端到端验证**
 7. ✅ **阶段 F**：多视频采样定标 quality 门控阈值（punct_density source-aware + ai-zh 来源标签修复）— **已完成**
 

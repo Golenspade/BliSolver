@@ -8,16 +8,20 @@
 ## 1. 对计划 §5.3 的实测修正
 
 计划 §5.3 算法预设"CC/AI/ASR 多语音源按时间重叠择优"。但降级链是**择一**的
-（CC 不可用→AI→whisper），正常只有一个语音源。同源择优场景（CC+AI 都可用）rare 且无现成
-测试视频。**真正的高频痛点是 ASR 幻觉**——阶段 C 实测撞上的。
+（CC 不可用→AI→whisper），正常只有一个语音源。真正的高频痛点是 ASR 幻觉——阶段 C 实测撞上的。
 
-因此 fuse.py 的优先级重排（基于实测，仍兼容 §5.3 原始 scope 作为接口预留）：
+**阶段 F 后对 §5.3 的最终处置：同源择优已删除。**
+原因：真实双语音源场景（BV1dSKJ6wEVz：human-CC + ai-zh 同时 gate-pass）测试显示：
+CC 是长整句合并，AI 是短词 chopped，0.80 文本相似阈值会拒掉 95% 的重叠 cues，
+要么选不到东西，要么合并出时间窗口被拉长的怪 segment 混淆下游 chunking。
+质量门控已经做了真正的源选择（gate-passing source 在降级链中胜出），第二层 fuse 再择优 ROI 为负。
+因此 `select_same_source` 及 `fuse(candidates=...)`、`--fuse` CLI 开关均已删除。
 
-| 职责 | 优先级 | §5.3 对应 | 实测驱动 |
-|---|---|---|---|
-| provenance 落地（segments 打 source/confidence） | P0 前置 | §3.1 字段真正生效 | 当前全 None |
-| ASR 幻觉检测 + 异源交叉（OCR 验真） | P0 核心 | §5.3 未明写，实测发现 | BV1LD7U65Ew2 97% 幻觉 |
-| 同源择优（CC+AI 多语音源） | P1 接口骨架 | §5.3 原始 scope | 无测试视频，单测覆盖 |
+| 职责 | 优先级 | §5.3 对应 | 实测驱动 | 最终状态 |
+|---|---|---|---|---|
+| provenance 落地（segments 打 source/confidence） | P0 前置 | §3.1 字段真正生效 | 当前全 None | ✅ 完成 |
+| ASR 幻觉检测 + 异源交叉（OCR 验真） | P0 核心 | §5.3 未明写，实测发现 | BV1LD7U65Ew2 97% 幻觉 | ✅ 完成 |
+| 同源择优（CC+AI 多语音源） | P1 接口骨架 | §5.3 原始 scope | 无测试视频 | ❌ **已删除** |
 
 ## 2. D-1：provenance 落地（数据出口打标签）
 
@@ -58,22 +62,18 @@
 - 下游（Atlas）通过 source_reason 知道"此 transcript 低可信，OCR 是真值"。
 - `FusionResult` 暴露 diagnostics 列表供 bundle.md 渲染诊断段。
 
-### 3.4 同源择优（P1 接口骨架）
+### 3.4 同源择优（已删除）
 
-`fuse(transcript, ocr, *, candidates=None)` 接受可选 `candidates: list[Transcript]`。
-当存在多语音源（CC+AI 都通过门控）：按 §5.3 算法——时间重叠 + 文本相似度择优。
-无测试视频，单测用合成数据覆盖算法正确性。
+~~`fuse(transcript, ocr, *, candidates=None)`~~ 曾接受可选 `candidates: list[Transcript]`。
+该接口及实现 `select_same_source`、`--fuse` CLI 开关已移除。保留这段文字作为删除记录。
 
 ## 4. CLI 集成
 
-- `--fuse` 开关（默认 off，保持现状）。开时在 build_bundle 前 `fuse.fuse(transcript, ocr)`。
-- 有 OCR track 时自动做异源交叉（即使 `--fuse` off，幻觉检测值得跑——降级到 OCR 是
-  下游决策依据）。倾向：`--fuse` 控同源择优；异源交叉在 `--ocr` 跑过时自动启用。
-- bundle.md 渲染 `## Fusion diagnostics` 段（当有诊断）。
+有 OCR track 时自动做异源交叉（幻觉检测 + OCR 交叉验证）；无 OCR track 时不跑 fuse。
+`--fuse` 开关已删除——同源择优已删除，不需要 flag。
 
 ## 5. 验收
 
-- BV1LD7U65Ew2：`--ocr --fuse` → transcript.segments 全带 source="whisper"；
+- BV1LD7U65Ew2：`--ocr`（不再需要 `--fuse`）→ transcript.segments 全带 source="whisper"；
   幻觉检测命中（46/69 重复）+ OCR 交叉确认；source_reason 注记幻觉；bundle.md 有诊断段。
-- 同源择优：合成多源单测覆盖。
 - 测试套件全绿。
