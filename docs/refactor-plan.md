@@ -13,7 +13,13 @@
 > 阶段 E（MCP 接口层）已完成并端到端验证：
 >   probe_video / extract_transcript(异步 job) / get_transcript / get_timeline / get_visual_context
 >   五工具全部调通（BV1dSKJ6wEVz：11s 完成，human-sub 86 段带 provenance）。
-> 剩余阶段 F：多视频采样定标 quality 门控阈值（实测发现 punct_density 对 AI 字幕误拒）。
+> 阶段 F（quality 门控定标）已完成并端到端验证：
+>   punct_density 改为 source-aware（auto-sub 跳过——实测 AI 字幕天然无标点，
+>   该指标只分来源不分质量；9 视频采样确认 dup/nonzh/cps 能区分好坏 AI）。
+>   连带修复 _pick_track 把 ai-zh 错标 human-sub 的 bug（bilibili 把 ai-zh 放
+>   subtitles 字段，字段不是来源信号，key 名才是）。
+>   BV111o6BAEg4 重跑：ai-zh 328 段真字幕过门控，不再降级 whisper。
+>   **计划 §9 全部 7 阶段完成。**
 > 所有判定均有真实代码实测支撑。
 > 本计划基于**真实代码实测**，非 README 假设。所有“保留/替换”判定均有实证支撑。
 
@@ -46,6 +52,14 @@ got = part_segments(canonical, settings, view=view)
 实测 BV111o6BAEg4：yt-dlp+chrome cookie 拿到的 ai-zh 只有 1 条 cue，内容是广告垃圾（"敲重点↓↓↓投降 包村 拥 威信 扫"），时长 27s vs 视频 893s。harvest 的 tier-1 时长 sanity check（`last_end/duration ∈ [0.70, 1.10]`）**正确拒掉它**，降级到 whisper。
 
 → **`quality.py` 是 cookie 路径唯一缺的安全网，原样保留**。它纯跑 `list[Segment]`，与抓取格式完全解耦，换路径它一行不改。这是"不爬"之后仍需要的把关层——两件事不矛盾。
+
+> ⚠️ **阶段 F 修正（2026-07）**：本节的"ai-zh 只有 1 条 cue 广告垃圾"实证基础已被阶段 F 推翻。
+> 那是 bilibili 字幕惰性提取 + data-embedded 两个 bug 修复**前**的采样假象（详见 commit `97d3af5`）。
+> bug 修复后重测 BV111o6BAEg4：ai-zh 是 **328 段真内容**（"觉得自己时间多的需要打发这件事情"…），
+> 不是广告垃圾；但被 `punct_density=0.04` 误拒（AI 字幕天然无标点）。阶段 F 把 punct_density 改为
+> source-aware（auto-sub 跳过）后，328 段过门控、不再降级 whisper。
+> **质量门控仍需保留**的结论不变——`dup_ratio`/`nonzh_ratio`/`cps` 仍正确拒掉真坏的 AI（如歌曲
+> 循环 ♪ 音乐符号 dup 0.88）。但"被污染成广告垃圾"这个具体场景实测未复现，风险表中相应条目降级。
 
 ### 1.3 transcribe 后端已替换为 whisper.cpp/Metal（drop-in）
 
@@ -218,7 +232,7 @@ bundle.md + bundle.json（schema 1.1）+ MCP 可查
 | 风险 | 来源 | 状态 | 缓解 |
 |---|---|---|---|
 | faster-whisper/CUDA 在 M1 跑不了 | 实测 | ✅已解决 | 换 whisper.cpp/Metal shim |
-| AI 字幕被污染成广告垃圾 | 实测 BV111o6BAEg4 | ✅已有缓解 | quality.py 门控正确拒掉 |
+| AI 字幕被污染成广告垃圾 | 实测 BV111o6BAEg4 | ✅已修正结论 | 阶段 F 重测推翻：是采样 bug 假象，真 ai-zh 是好内容；quality.py 仍拒真坏的（歌曲循环♪，dup 0.88） |
 | PaddleOCR native runtime 污染 harvest 依赖 | SubtitleExtractor README | 待验证 | ocr.py 子进程隔离 |
 | 字幕时间戳超视频时长（1.86x） | 实测 | 待定 | tier-1 区间 [0.70,1.10] 可能偏严，需多视频采样后定标 |
 | whisper medium 在 M1 要 ~40 分钟 | 实测 | 待优化 | 可换 small/ggml-large-v3 量化版；或后续接 SenseVoice |
@@ -233,7 +247,7 @@ bundle.md + bundle.json（schema 1.1）+ MCP 可查
 4. ✅ **阶段 C**：移植 `ocr.py` + `detect_hardsubs.py`（子进程隔离）— **已完成并端到端验证**
 5. ✅ **阶段 D**：`fuse.py` 多源融合（provenance 落地 + ASR 幻觉检测 + OCR 交叉验证 + 同源择优接口）— **已完成**
 6. ✅ **阶段 E**：MCP 接口层（probe_video/extract_transcript/get_transcript/get_timeline/get_visual_context）— **已完成并端到端验证**
-7. **阶段 F**：多视频采样，定标 quality 门控阈值（尤其是 tier-1 时长区间 + punct_density 对 AI 字幕误拒）
+7. ✅ **阶段 F**：多视频采样定标 quality 门控阈值（punct_density source-aware + ai-zh 来源标签修复）— **已完成**
 
 每个阶段都应像阶段 A 一样：先用真实视频端到端验证，再固化到计划。
 
