@@ -6,7 +6,10 @@
 > 阶段 C（硬字幕 OCR 子进程隔离 + detect_hardsubs）已完成并端到端验证
 >   （BV1LD7U65Ew2, 109 烧录字幕 cues, 置信 ~0.99；引擎用 rapidocr-onnxruntime，
 >   避开 paddlepaddle native runtime）。
-> 阶段 D 起需 fuse.py 多源融合 + provenance/confidence 编织到主 transcript。
+> 阶段 D（fuse.py 多源融合）已完成并端到端验证：
+>   provenance 落地（segments 带 source/confidence）+ ASR 幻觉检测 + OCR 异源交叉验证
+>   （BV1LD7U65Ew2: ASR 67% 重复幻觉，69 个窗口被 OCR 证伪，source_reason 注记诊断）。
+> 同源择优接口预留（无多源视频，单测覆盖）。
 > 所有判定均有真实代码实测支撑。
 > 本计划基于**真实代码实测**，非 README 假设。所有“保留/替换”判定均有实证支撑。
 
@@ -224,7 +227,8 @@ bundle.md + bundle.json（schema 1.1）+ MCP 可查
 2. ✅ **阶段 B-1**：删 `player_api.part_segments` 死代码 + 默认 cookie browser 改 chrome — **已完成**
 3. ✅ **阶段 B-2**：schema 1.0→1.1（加 Segment.source/confidence、Bundle.ocr）— **已完成**
 4. ✅ **阶段 C**：移植 `ocr.py` + `detect_hardsubs.py`（子进程隔离）— **已完成并端到端验证**
-5. **阶段 D**：`fuse.py` 多源融合
+5. ✅ **阶段 D**：`fuse.py` 多源融合（provenance 落地 + ASR 幻觉检测 + OCR 交叉验证 + 同源择优接口）— **已完成**
+5. ✅ **阶段 D**：`fuse.py` 多源融合 — **已完成**
 6. **阶段 E**：MCP 接口层
 7. **阶段 F**：多视频采样，定标 quality 门控阈值（尤其是 tier-1 时长区间）
 

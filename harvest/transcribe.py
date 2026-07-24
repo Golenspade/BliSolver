@@ -148,4 +148,10 @@ def transcribe(
 
     if not srt_path.exists() or srt_path.stat().st_size == 0:
         return []
-    return parse_srt(srt_path.read_text(encoding="utf-8"))
+    segments = parse_srt(srt_path.read_text(encoding="utf-8"))
+    # Provenance (schema 1.1): tag each ASR cue with its source so fuse.py/downstream can tell
+    # whisper cues from CC/OCR cues without guessing. whisper.cpp doesn't expose per-segment
+    # confidence, so confidence stays None (honest, not fabricated).
+    for seg in segments:
+        seg.source = "whisper"
+    return segments

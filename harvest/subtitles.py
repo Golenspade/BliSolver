@@ -300,6 +300,14 @@ def probe(
             last_cue_end=last_end,
         )
 
+    # Provenance (schema 1.1): tag each CC cue with its source + confidence=1.0 (CC is a
+    # trusted track by construction; ASR/OCR report their own confidence where available).
+    # `source` here is "human-sub"/"auto-sub" from _pick_track.
+    for seg in segments:
+        seg.source = source
+        if seg.confidence is None:
+            seg.confidence = 1.0
+
     return SubtitleResult(
         True, source, lang, segments=segments, reason=f"{source} ({lang})", last_cue_end=last_end
     )

@@ -81,6 +81,13 @@ def parse_args(argv=None) -> argparse.Namespace:
         help="with --ocr: skip the hard-sub pre-detection and always run dense-sample OCR "
              "(use when detection misses a hard-sub track you know is present)",
     )
+    ingest.add_argument(
+        "--fuse", action="store_true",
+        help="opt-in: run multi-source fusion (Phase D). Provenance tagging is always on; "
+             "--fuse additionally enables same-source selection and surfaces fusion diagnostics. "
+             "ASR hallucination detection + OCR cross-verification run automatically whenever an OCR "
+             "track is present, with or without --fuse.",
+    )
 
     probe_cmd = sub.add_parser("probe", help="cheap pre-flight metadata probe, no media")
     probe_cmd.add_argument("url")
@@ -138,6 +145,11 @@ def _whisper(canonical, settings, args, *, reason, gate=None, lang=None) -> Tran
     cached = load_json(settings.cache_dir, "transcript", key)
     if cached is not None:
         segments = [Segment(**s) for s in cached]
+        # Provenance backfill (schema 1.1): old caches lack `source`; tag whisper so fuse/downstream
+        # see the provenance even on a pre-1.1 cache hit. New caches already carry it.
+        for seg in segments:
+            if seg.source is None:
+                seg.source = "whisper"
         print(
             f"[{canonical.id} p{canonical.part}] whisper "
             f"({len(segments)} seg, cached): {reason}"
@@ -205,6 +217,20 @@ def process_part(canonical: Canonical, settings: Settings, args) -> None:
             interactions = provider.fetch_interactions(canonical, settings)
 
     ocr_track = _maybe_ocr(canonical, settings, args, transcript, log=lambda m: print(m))
+
+    # Phase D fusion: provenance tags are already on the segments (transcribe/provider outlets);
+    # fuse annotates diagnostics (ASR hallucination + OCR cross-verification) onto the
+    # transcript's source_reason and surfaces structured signals. Same-source selection only runs
+    # under --fuse (and only matters with multi-source candidates, which the single-source
+    # degradation chain doesn't currently produce). Hallucination/cross-verification auto-run
+    # whenever an OCR track is present — the diagnosis is downstream's authority signal.
+    if getattr(args, "fuse", False) or ocr_track is not None:
+        from .fuse import fuse
+        fusion = fuse(transcript, ocr_track)
+        transcript = fusion.transcript
+        if fusion.diagnostics:
+            print(f"[{canonical.id} p{canonical.part}] fusion: "
+                  f"{'; '.join(fusion.diagnostics)}")
 
     bundle = build_bundle(
         canonical, meta, transcript, frames, settings,
