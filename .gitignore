@@ -1,0 +1,25 @@
+# secrets
+.env
+
+# macOS
+.DS_Store
+
+# artifacts (downloaded media, transcript/ocr caches, bundle output)
+cache/
+out/
+scratch/
+
+# throwaway probes (danmaku dumper, dumps)
+scratch/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ocr-venv/   # Phase C: isolated OCR worker env (rapidocr-onnxruntime + opencv)
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/

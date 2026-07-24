@@ -1,0 +1,52 @@
+{
+  "id": "dQw4w9WgXcQ",
+  "title": "Rick Astley - Never Gonna Give You Up (Official Video) (4K Remaster)",
+  "language": "en",
+  "channel_id": "UCuAXFkgsw1L7xaCfnd5JJOw",
+  "uploader_id": "@RickAstleyYT",
+  "channel": "Rick Astley",
+  "uploader": "Rick Astley",
+  "upload_date": "20091025",
+  "timestamp": 1256453853,
+  "release_timestamp": null,
+  "duration": 213,
+  "view_count": 1700000000,
+  "like_count": 18000000,
+  "thumbnail": "https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg",
+  "webpage_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+  "extractor": "youtube",
+  "description": "The official video for “Never Gonna Give You Up” by Rick Astley. \n\nNever: The Autobiography 📚 OUT NOW! \nFollow this link to get your copy and listen to Rick’s ‘Never’ playlist ❤️ #RickAstleyNever\nhttp",
+  "subtitles": {
+    "en": [
+      {
+        "ext": "vtt",
+        "name": "English",
+        "url": "https://www.youtube.com/api/timedtext?v=dQw4w9WgXcQ&ei=rqhFaqKeBZ3RmLAPg7vc-Qs&c...(truncated)"
+      }
+    ],
+    "de-DE": [
+      {
+        "ext": "vtt",
+        "name": "German (Germany)",
+        "url": "https://www.youtube.com/api/timedtext?v=dQw4w9WgXcQ&ei=rqhFaqKeBZ3RmLAPg7vc-Qs&c...(truncated)"
+      }
+    ]
+  },
+  "automatic_captions": {
+    "en": [
+      {
+        "ext": "vtt",
+        "name": "English",
+        "url": "https://www.youtube.com/api/timedtext?v=dQw4w9WgXcQ&ei=rqhFaqKeBZ3RmLAPg7vc-Qs&c...(truncated)"
+      }
+    ]
+  },
+  "_note_full_auto_key_count": 157,
+  "_note_full_sub_keys": [
+    "de-DE",
+    "en",
+    "es-419",
+    "ja",
+    "pt-BR"
+  ]
+}
