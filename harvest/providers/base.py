@@ -7,7 +7,7 @@ never branches on platform.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
 from ..schema import Platform, QualityGate, Segment
@@ -44,6 +44,8 @@ class SourceMetadata:
     parts: int
     part_durations_s: list[int | None]
     thumbnail_url: str | None = None
+    original_language: str | None = None
+    available_subtitles: list[dict] = field(default_factory=list)
     view_count: int | None = None
     like_count: int | None = None
     coin_count: int | None = None       # bilibili-only
@@ -89,7 +91,9 @@ def register(provider: Provider) -> None:
 
 
 def select_provider(url: str) -> Provider:
+    from ..resolve import extract_url
+    clean_url = extract_url(url)
     for p in _REGISTRY:
-        if p.matches(url):
+        if p.matches(clean_url):
             return p
     raise ValueError(f"no provider matches URL: {url}")

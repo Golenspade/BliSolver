@@ -46,11 +46,15 @@ def _video_id(url: str) -> str | None:
 
 class YouTubeProvider:
     def matches(self, url: str) -> bool:
-        host = urlparse(url).netloc.lower()
+        from ..resolve import extract_url
+        clean_url = extract_url(url)
+        host = urlparse(clean_url).netloc.lower()
         return host.endswith("youtube.com") or host.endswith("youtu.be")
 
     def resolve(self, url: str) -> Canonical:
-        vid = _video_id(url)
+        from ..resolve import extract_url
+        clean_url = extract_url(url)
+        vid = _video_id(clean_url)
         if not vid:
             raise ValueError(f"unrecognized YouTube video id in URL: {url}")
         return Canonical("youtube.com", vid, 1, f"https://www.youtube.com/watch?v={vid}")
@@ -77,6 +81,14 @@ class YouTubeProvider:
     def _metadata_from_info(self, info: dict) -> SourceMetadata:
         dur = info.get("duration")
         dur_i = int(dur) if dur else None
+        subs = []
+        human = info.get("subtitles") or {}
+        for k in human:
+            subs.append({"code": k, "source": "human-sub", "title": k})
+        auto = info.get("automatic_captions") or {}
+        for k in auto:
+            subs.append({"code": k, "source": "auto-sub", "title": k})
+
         return SourceMetadata(
             platform="youtube.com",
             id=info.get("id"),
@@ -89,6 +101,8 @@ class YouTubeProvider:
             parts=1,
             part_durations_s=[dur_i],
             thumbnail_url=info.get("thumbnail"),
+            original_language=info.get("language"),
+            available_subtitles=subs,
             view_count=info.get("view_count"),
             like_count=info.get("like_count"),
         )

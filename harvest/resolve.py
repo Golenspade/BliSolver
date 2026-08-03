@@ -16,6 +16,38 @@ from .providers.base import Canonical  # re-exported for backward-compatible imp
 from .schema import Platform
 
 _COM_ID = re.compile(r"(BV[0-9A-Za-z]+|av\d+)", re.IGNORECASE)
+_URL_RE = re.compile(r"(https?://[^\s\"'>]+|//[^\s\"'>]+)")
+
+
+def extract_url(text: str) -> str:
+    """Extract and sanitize a valid video URL from raw input text.
+
+    Handles pasted text with Chinese title prefixes, <iframe...> HTML snippets,
+    player.bilibili.com embed links, and extra tracking query parameters.
+    """
+    if not text:
+        return ""
+
+    match = _URL_RE.search(text)
+    url = match.group(1) if match else text.strip()
+
+    if url.startswith("//"):
+        url = "https:" + url
+
+    parsed = urlparse(url)
+    host = parsed.netloc.lower()
+
+    if "player.bilibili.com" in host:
+        qs = parse_qs(parsed.query)
+        bvid = qs.get("bvid", [None])[0]
+        part = qs.get("p", ["1"])[0]
+        if bvid:
+            canon = f"https://www.bilibili.com/video/{bvid}"
+            if part and part != "1":
+                canon += f"?p={part}"
+            return canon
+
+    return url
 
 
 def _expand_b23(url: str) -> str:
@@ -30,6 +62,7 @@ def _expand_b23(url: str) -> str:
 
 
 def resolve(url: str, expander: Callable[[str], str] | None = None) -> Canonical:
+    url = extract_url(url)
     parsed = urlparse(url)
     host = parsed.netloc.lower()
 

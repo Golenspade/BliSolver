@@ -28,8 +28,15 @@ from .base import Canonical, SourceMetadata, SubtitleOutcome, register
 
 class BilibiliProvider:
     def matches(self, url: str) -> bool:
-        host = urlparse(url).netloc.lower()
-        return host.endswith("bilibili.com") or host.endswith("bilibili.tv") or host.endswith("b23.tv")
+        from ..resolve import extract_url
+        clean_url = extract_url(url)
+        host = urlparse(clean_url).netloc.lower()
+        return (
+            host.endswith("bilibili.com")
+            or host.endswith("bilibili.tv")
+            or host.endswith("b23.tv")
+            or host.endswith("player.bilibili.com")
+        )
 
     def resolve(self, url: str) -> Canonical:
         return _resolve(url)
@@ -45,6 +52,16 @@ class BilibiliProvider:
 
     def fetch_metadata(self, canonical, settings, *, opener=None) -> SourceMetadata:
         view = fetch_view(canonical, settings, opener=opener)
+        subs = []
+        try:
+            info = extract_info(canonical.url, settings)
+            sub_dict = info.get("subtitles") or {}
+            for k in sub_dict:
+                source = "auto-sub" if k.startswith("ai-") else "human-sub"
+                subs.append({"code": k, "source": source, "title": k})
+        except Exception:
+            pass
+
         return SourceMetadata(
             platform=canonical.platform,
             id=canonical.id,
@@ -57,6 +74,8 @@ class BilibiliProvider:
             parts=max(len(view.pages), 1),
             part_durations_s=[pg.duration for pg in view.pages],
             thumbnail_url=view.pic,
+            original_language="zh" if canonical.platform == "bilibili.com" else None,
+            available_subtitles=subs,
             view_count=view.view_count,
             like_count=view.like_count,
             coin_count=view.coin_count,
