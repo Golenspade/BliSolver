@@ -794,3 +794,22 @@ def test_build_bundle_threads_interactions():
         _canonical(), meta, _transcript(), [], _settings(), interactions=interactions
     )
     assert bundle.interactions == interactions
+
+
+def test_write_bundle_dir_name_format_with_sanitized_title(tmp_path):
+    from harvest.merge import write_bundle, _sanitize_filename
+    assert _sanitize_filename("力工？喜欢:梭哈？坏了！") == "力工？喜欢 梭哈？坏了！"
+
+    bundle = _bundle()
+    bundle.title = "力工？喜欢:梭哈？坏了！"
+    bundle.id = "BV1x2T463E7L"
+    bundle.part = 1
+
+    settings = Settings()
+    settings.out_dir = tmp_path / "out"
+
+    out = write_bundle(bundle, settings, frame_sources={}, frame_images=False)
+    assert out.name == "力工？喜欢 梭哈？坏了！ [BV1x2T463E7L-p1]"
+    assert (out / "bundle.json").exists()
+    assert (out / "bundle.md").exists()
+

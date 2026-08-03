@@ -17,7 +17,7 @@ import yaml
 
 from .config import Settings
 from .providers.base import Canonical, SourceMetadata
-from .schema import Bundle, Danmaku, Frame, Interactions, Meta, Segment, Stats, Transcript
+from .schema import Bundle, Danmaku, Frame, Interactions, Meta, Segment, Stats, SubtitleTrackInfo, Transcript
 
 # The ordinary per-window danmaku cap for bundle.md lives in Settings.danmaku_md_cap
 # (env HARVEST_DANMAKU_MD_CAP) -- a tunable gestalt-sample dial. bundle.json is always complete.
@@ -128,6 +128,8 @@ def build_bundle(
         title=meta.title, uploader=meta.uploader, uploader_id=meta.uploader_id,
         description=meta.description, duration_s=meta.duration_s, published_at=meta.published_at,
         thumbnail_url=meta.thumbnail_url,
+        original_language=meta.original_language,
+        available_subtitles=[SubtitleTrackInfo(**s) if isinstance(s, dict) else s for s in meta.available_subtitles],
         stats=Stats(
             view_count=meta.view_count, like_count=meta.like_count, coin_count=meta.coin_count,
             favorite_count=meta.favorite_count, share_count=meta.share_count,
@@ -158,6 +160,8 @@ def render_markdown(bundle: Bundle, settings: Settings) -> str:
         "duration": dur,
         "published_at": bundle.published_at or "",
         "fetched_at": bundle.fetched_at,
+        "original_language": bundle.original_language or "",
+        "available_subtitles": [f"{s.code} ({s.source})" for s in bundle.available_subtitles],
         "transcript_source": f"{t.source} ({t.source_reason})",
         "vision_model": bundle.meta.vision_model or "none",
         "tool_version": bundle.meta.tool_version,
@@ -285,6 +289,18 @@ def render_markdown(bundle: Bundle, settings: Settings) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+_INVALID_FILENAME_CHARS = re.compile(r'[\\/:*?"<>|\r\n\t]')
+
+
+def _sanitize_filename(name: str) -> str:
+    """Clean a string for safe use in cross-platform directory names."""
+    if not name:
+        return ""
+    cleaned = _INVALID_FILENAME_CHARS.sub(" ", name)
+    cleaned = " ".join(cleaned.split())
+    return cleaned.strip(" .")
+
+
 def write_bundle(
     bundle: Bundle,
     settings: Settings,
@@ -292,13 +308,15 @@ def write_bundle(
     frame_sources: dict[str, Path] | None = None,
     frame_images: bool = True,
 ) -> Path:
-    """Write the self-contained delivery dir out/<id>-p<part>/ (D8).
+    """Write the self-contained delivery dir out/<sanitized_title> [<id>-p<part>]/ (D8).
 
     frame_images=False (--no-frame-images, D8): omit PNGs from out/ and null each frame's `path`
     in bundle.json — the record keeps phash/ts/caption/ocr and the markdown keeps the caption
     text, so only the QA images are dropped.
     """
-    out = settings.out_dir / f"{bundle.id}-p{bundle.part}"
+    clean_title = _sanitize_filename(bundle.title or "")
+    dir_name = f"{clean_title} [{bundle.id}-p{bundle.part}]" if clean_title else f"{bundle.id}-p{bundle.part}"
+    out = settings.out_dir / dir_name
     out.mkdir(parents=True, exist_ok=True)
     frames_dir = out / "frames"
     # Rebuild frames/ from scratch so the delivered dir matches bundle.json exactly (D8) and
