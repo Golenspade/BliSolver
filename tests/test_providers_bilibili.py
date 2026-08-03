@@ -1,6 +1,6 @@
-from harvest.config import Settings
-from harvest.providers.base import Canonical, SourceMetadata
-from harvest.providers.bilibili import BilibiliProvider
+from blisolver.config import Settings
+from blisolver.providers.base import Canonical, SourceMetadata
+from blisolver.providers.bilibili import BilibiliProvider
 from tests.test_player_api import _FakeOpener, _view_url
 
 
@@ -16,7 +16,7 @@ def test_matches_bilibili_com_and_short_link():
 
 
 def test_auth_opts_still_carries_bilibili_referer():
-    from harvest.config import REFERER
+    from blisolver.config import REFERER
 
     p = BilibiliProvider()
     opts = p.auth_opts(Settings())
@@ -83,9 +83,9 @@ def test_enumerate_parts_counts_view_pages():
 # Monkeypatch the provider's collaborators so these stay offline and pin the OUTCOME contract.
 
 def test_fetch_subtitle_accepts_when_gate_passes(monkeypatch):
-    from harvest.providers import bilibili as biliprov
-    from harvest.schema import QualityGate, Segment
-    from harvest.subtitles import SubtitleResult
+    from blisolver.providers import bilibili as biliprov
+    from blisolver.schema import QualityGate, Segment
+    from blisolver.subtitles import SubtitleResult
 
     p = BilibiliProvider()
     segs = [Segment(start=0.0, end=1.0, text="你好")]
@@ -101,9 +101,9 @@ def test_fetch_subtitle_accepts_when_gate_passes(monkeypatch):
 
 
 def test_fetch_subtitle_rejects_when_gate_fails_and_carries_gate(monkeypatch):
-    from harvest.providers import bilibili as biliprov
-    from harvest.schema import QualityGate, Segment
-    from harvest.subtitles import SubtitleResult
+    from blisolver.providers import bilibili as biliprov
+    from blisolver.schema import QualityGate, Segment
+    from blisolver.subtitles import SubtitleResult
 
     p = BilibiliProvider()
     failed = QualityGate(passed=False, punct_density=0.0, dup_ratio=0.9, nonzh_ratio=0.0, cps=1.0)
@@ -120,8 +120,8 @@ def test_fetch_subtitle_rejects_when_gate_fails_and_carries_gate(monkeypatch):
 
 def test_fetch_danmaku_delegates_to_player_api(monkeypatch):
     """BilibiliProvider.fetch_danmaku is a thin delegation to player_api.fetch_danmaku."""
-    from harvest.player_api import DanmakuFetch
-    from harvest.providers import bilibili as biliprov
+    from blisolver.player_api import DanmakuFetch
+    from blisolver.providers import bilibili as biliprov
 
     p = BilibiliProvider()
     canonical = _canonical()
@@ -144,8 +144,8 @@ def test_fetch_danmaku_delegates_to_player_api(monkeypatch):
 
 
 def test_fetch_subtitle_rejected_when_probe_not_found_no_gate(monkeypatch):
-    from harvest.providers import bilibili as biliprov
-    from harvest.subtitles import SubtitleResult
+    from blisolver.providers import bilibili as biliprov
+    from blisolver.subtitles import SubtitleResult
 
     p = BilibiliProvider()
     monkeypatch.setattr(biliprov, "extract_info", lambda url, s: {"duration": 100})

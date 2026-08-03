@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-from harvest.cli import apply_overrides, main, parse_args
-from harvest.config import Settings
+from blisolver.cli import apply_overrides, main, parse_args
+from blisolver.config import Settings
 
 
 def _settings():
@@ -116,8 +116,8 @@ def test_no_args_at_all_is_a_system_exit():
 
 
 def test_probe_path_prints_only_json_to_stdout(monkeypatch, capsys):
-    from harvest import cli
-    from harvest.schema import ProbeResult
+    from blisolver import cli
+    from blisolver.schema import ProbeResult
 
     def fake_probe(canonical, settings, **kwargs):
         return ProbeResult(
@@ -167,8 +167,8 @@ def test_probe_resolves_youtube_url_via_provider_seam(monkeypatch, capsys):
     """A YouTube URL must resolve through the provider seam, not the bilibili-only resolve()
     (which raises `not a bilibili URL`). Regression for the CLI never wiring the seam into
     URL resolution."""
-    from harvest import cli
-    from harvest.schema import ProbeResult
+    from blisolver import cli
+    from blisolver.schema import ProbeResult
 
     seen = {}
 
@@ -191,7 +191,7 @@ def test_probe_resolves_youtube_url_via_provider_seam(monkeypatch, capsys):
 def test_ingest_resolves_youtube_url_via_provider_seam(monkeypatch):
     """`ingest` must resolve a YouTube URL through the seam too, then run the single-part
     pipeline. Regression twin of the probe seam test."""
-    from harvest import cli
+    from blisolver import cli
 
     seen = {}
 
@@ -206,9 +206,9 @@ def test_ingest_resolves_youtube_url_via_provider_seam(monkeypatch):
 
 
 def test_decide_transcript_youtube_reuses_human_sub_no_quality_gate(monkeypatch):
-    from harvest import cli
-    from harvest.providers.base import Canonical, SourceMetadata, SubtitleOutcome
-    from harvest.schema import Segment
+    from blisolver import cli
+    from blisolver.providers.base import Canonical, SourceMetadata, SubtitleOutcome
+    from blisolver.schema import Segment
 
     canonical = Canonical("youtube.com", "dQw4w9WgXcQ", 1, "https://youtu.be/dQw4w9WgXcQ")
     meta = SourceMetadata(platform="youtube.com", id="dQw4w9WgXcQ", title="T", uploader="C",
@@ -233,8 +233,8 @@ def test_decide_transcript_youtube_reuses_human_sub_no_quality_gate(monkeypatch)
 
 
 def test_decide_transcript_youtube_falls_back_to_whisper(monkeypatch):
-    from harvest import cli
-    from harvest.providers.base import Canonical, SourceMetadata
+    from blisolver import cli
+    from blisolver.providers.base import Canonical, SourceMetadata
 
     canonical = Canonical("youtube.com", "x", 1, "https://youtu.be/x")
     meta = SourceMetadata(platform="youtube.com", id="x", title=None, uploader=None,
@@ -249,7 +249,7 @@ def test_decide_transcript_youtube_falls_back_to_whisper(monkeypatch):
     captured = {}
 
     def fake_whisper(canonical, settings, args, *, reason, gate=None, lang=None):
-        from harvest.schema import Transcript
+        from blisolver.schema import Transcript
         captured["lang"] = lang
         return Transcript(source="whisper", source_reason=reason, language=lang, segments=[])
 
@@ -262,9 +262,9 @@ def test_decide_transcript_youtube_falls_back_to_whisper(monkeypatch):
 
 def test_decide_transcript_bilibili_accepted_outcome_keeps_gate(monkeypatch):
     # Agnostic path: provider returns an accepted outcome (gate passed) -> Transcript mirrors it.
-    from harvest import cli
-    from harvest.providers.base import Canonical, SourceMetadata, SubtitleOutcome
-    from harvest.schema import QualityGate, Segment
+    from blisolver import cli
+    from blisolver.providers.base import Canonical, SourceMetadata, SubtitleOutcome
+    from blisolver.schema import QualityGate, Segment
 
     canonical = Canonical("bilibili.com", "BV1", 1, "https://www.bilibili.com/video/BV1")
     meta = SourceMetadata(platform="bilibili.com", id="BV1", title="T", uploader="U",
@@ -286,9 +286,9 @@ def test_decide_transcript_bilibili_accepted_outcome_keeps_gate(monkeypatch):
 
 def test_decide_transcript_rejected_outcome_falls_back_to_whisper_with_gate(monkeypatch):
     # accepted=False must carry source_reason + failed gate into the Whisper transcript.
-    from harvest import cli
-    from harvest.providers.base import Canonical, SourceMetadata, SubtitleOutcome
-    from harvest.schema import QualityGate
+    from blisolver import cli
+    from blisolver.providers.base import Canonical, SourceMetadata, SubtitleOutcome
+    from blisolver.schema import QualityGate
 
     canonical = Canonical("bilibili.com", "BV1", 1, "https://www.bilibili.com/video/BV1")
     meta = SourceMetadata(platform="bilibili.com", id="BV1", title="T", uploader="U",
@@ -306,7 +306,7 @@ def test_decide_transcript_rejected_outcome_falls_back_to_whisper_with_gate(monk
     captured = {}
 
     def fake_whisper(canonical, settings, args, *, reason, gate=None, lang=None):
-        from harvest.schema import Transcript
+        from blisolver.schema import Transcript
         captured.update(reason=reason, gate=gate, lang=lang)
         return Transcript(source="whisper", source_reason=reason, language=lang,
                           quality_gate=gate, segments=[])
@@ -320,8 +320,8 @@ def test_decide_transcript_rejected_outcome_falls_back_to_whisper_with_gate(monk
 
 def test_ingest_enumerates_parts_from_view_pages(monkeypatch):
     """--all-parts on a .com URL must derive its part count from the provider, not yt-dlp."""
-    from harvest import cli
-    from harvest.providers.base import Canonical
+    from blisolver import cli
+    from blisolver.providers.base import Canonical
 
     class _FakeP:
         def resolve(self, url):
@@ -345,9 +345,9 @@ def test_ingest_enumerates_parts_from_view_pages(monkeypatch):
 
 
 def test_process_part_fetches_metadata_once_and_shares_it(monkeypatch):
-    from harvest import cli
-    from harvest.providers.base import Canonical, SourceMetadata
-    from harvest.schema import Bundle, Meta, Transcript
+    from blisolver import cli
+    from blisolver.providers.base import Canonical, SourceMetadata
+    from blisolver.schema import Bundle, Meta, Transcript
 
     canonical = Canonical("youtube.com", "x", 1, "https://youtu.be/x")
     meta = SourceMetadata(platform="youtube.com", id="x", title="t", uploader=None,
@@ -389,8 +389,8 @@ def _danmaku_setup(monkeypatch, *, provider, danmaku_result=None):
     """Shared scaffolding for process_part --danmaku wiring tests: stubs select_provider,
     decide_transcript, build_bundle (captures its danmaku kwarg), write_bundle, and
     represent_danmaku (never hits a real LLM/network)."""
-    from harvest import cli
-    from harvest.schema import Bundle, Meta, Segment, Transcript
+    from blisolver import cli
+    from blisolver.schema import Bundle, Meta, Segment, Transcript
 
     calls = {"represent_danmaku": None, "build_danmaku": "unset"}
 
@@ -426,9 +426,9 @@ def _danmaku_setup(monkeypatch, *, provider, danmaku_result=None):
 
 
 def test_process_part_danmaku_uses_fixed_danmaku_window_not_frame_boundaries(monkeypatch):
-    from harvest.providers.base import SourceMetadata
-    from harvest.resolve import Canonical
-    from harvest.schema import Danmaku
+    from blisolver.providers.base import SourceMetadata
+    from blisolver.resolve import Canonical
+    from blisolver.schema import Danmaku
 
     canonical = Canonical("bilibili.com", "BV1", 1, "https://www.bilibili.com/video/BV1")
     meta = SourceMetadata(platform="bilibili.com", id="BV1", title="t", uploader=None,
@@ -446,7 +446,7 @@ def test_process_part_danmaku_uses_fixed_danmaku_window_not_frame_boundaries(mon
 
     calls = _danmaku_setup(monkeypatch, provider=_FakeBili(), danmaku_result=danmaku_result)
 
-    from harvest import cli
+    from blisolver import cli
     settings = _settings()
     settings.lmstudio_danmaku_model = "test-danmaku-model"
     args = parse_args(["ingest", "https://www.bilibili.com/video/BV1", "--danmaku", "--no-vision"])
@@ -462,8 +462,8 @@ def test_process_part_danmaku_uses_fixed_danmaku_window_not_frame_boundaries(mon
 
 
 def test_process_part_danmaku_flag_on_youtube_warns_and_stays_none(monkeypatch, capsys):
-    from harvest.providers.base import SourceMetadata
-    from harvest.resolve import Canonical
+    from blisolver.providers.base import SourceMetadata
+    from blisolver.resolve import Canonical
 
     canonical = Canonical("youtube.com", "x", 1, "https://youtu.be/x")
     meta = SourceMetadata(platform="youtube.com", id="x", title="t", uploader=None,
@@ -477,7 +477,7 @@ def test_process_part_danmaku_flag_on_youtube_warns_and_stays_none(monkeypatch, 
 
     calls = _danmaku_setup(monkeypatch, provider=_FakeYT())
 
-    from harvest import cli
+    from blisolver import cli
     args = parse_args(["ingest", "https://youtu.be/x", "--danmaku", "--no-vision"])
     cli.process_part(canonical, _settings(), args)
 
@@ -489,8 +489,8 @@ def test_process_part_danmaku_flag_on_youtube_warns_and_stays_none(monkeypatch, 
 
 
 def test_process_part_danmaku_flag_without_model_configured_warns_and_skips(monkeypatch, capsys):
-    from harvest.providers.base import SourceMetadata
-    from harvest.resolve import Canonical
+    from blisolver.providers.base import SourceMetadata
+    from blisolver.resolve import Canonical
 
     canonical = Canonical("bilibili.com", "BV1", 1, "https://www.bilibili.com/video/BV1")
     meta = SourceMetadata(platform="bilibili.com", id="BV1", title="t", uploader=None,
@@ -506,7 +506,7 @@ def test_process_part_danmaku_flag_without_model_configured_warns_and_skips(monk
 
     calls = _danmaku_setup(monkeypatch, provider=_FakeBili())
 
-    from harvest import cli
+    from blisolver import cli
     settings = _settings()
     assert settings.lmstudio_danmaku_model == ""  # unset by default -- the case under test
     args = parse_args(["ingest", "https://www.bilibili.com/video/BV1", "--danmaku", "--no-vision"])
@@ -516,12 +516,12 @@ def test_process_part_danmaku_flag_without_model_configured_warns_and_skips(monk
     assert calls["build_danmaku"] is None       # Bundle.danmaku stays null
     captured = capsys.readouterr()
     assert "--danmaku ignored" in captured.out
-    assert "HARVEST_DANMAKU_MODEL not set" in captured.out
+    assert "BLISOLVER_DANMAKU_MODEL not set" in captured.out
 
 
 def test_process_part_without_danmaku_flag_leaves_bundle_danmaku_none_and_skips_represent(monkeypatch):
-    from harvest.providers.base import SourceMetadata
-    from harvest.resolve import Canonical
+    from blisolver.providers.base import SourceMetadata
+    from blisolver.resolve import Canonical
 
     canonical = Canonical("bilibili.com", "BV1", 1, "https://www.bilibili.com/video/BV1")
     meta = SourceMetadata(platform="bilibili.com", id="BV1", title="t", uploader=None,
@@ -537,7 +537,7 @@ def test_process_part_without_danmaku_flag_leaves_bundle_danmaku_none_and_skips_
 
     calls = _danmaku_setup(monkeypatch, provider=_FakeBili())
 
-    from harvest import cli
+    from blisolver import cli
     args = parse_args(["ingest", "https://www.bilibili.com/video/BV1", "--no-vision"])
     cli.process_part(canonical, _settings(), args)
 

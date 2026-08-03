@@ -1,4 +1,4 @@
-from harvest.cache import stage_key
+from blisolver.cache import stage_key
 
 
 def test_base_key_with_no_params():

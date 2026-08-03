@@ -1,6 +1,6 @@
 """Download the original bilibili video (all parts) without running the ingest pipeline.
 
-Reuses harvest's Settings + ydl_opts so auth (browser cookies / SESSDATA), Referer,
+Reuses blisolver's Settings + ydl_opts so auth (browser cookies / SESSDATA), Referer,
 aria2c, and ffmpeg config match the project's normal download path.
 
 Usage: .venv/bin/python scripts/download_video.py
@@ -12,8 +12,8 @@ from pathlib import Path
 
 import yt_dlp
 
-from harvest.config import Settings
-from harvest.subtitles import ydl_opts
+from blisolver.config import Settings
+from blisolver.subtitles import ydl_opts
 
 BVID = "BV1QzwuzeEq1"
 PARTS = 3

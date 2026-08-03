@@ -1,5 +1,5 @@
-from harvest.parts import PartResult, part_url, run_parts, select_parts
-from harvest.resolve import Canonical
+from blisolver.parts import PartResult, part_url, run_parts, select_parts
+from blisolver.resolve import Canonical
 
 
 def test_part_url_appends_query_to_bare_canonical():

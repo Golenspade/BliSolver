@@ -1,4 +1,4 @@
-# BliSolver 重构计划：基于 2phite/harvest 的多源视频字幕摄取系统
+# BliSolver 重构计划：基于 2phite/blisolver 的多源视频字幕摄取系统
 
 > 状态：阶段 A（transcribe 后端替换为 whisper.cpp/Metal）已完成并端到端验证；
 > 阶段 B-1（删除死代码 player-API 字幕回退、默认 cookie 改 chrome）已完成；
@@ -25,15 +25,15 @@
 
 ## 0. 一句话定位
 
-以 `2phite/harvest` 为骨架，换掉它的两个承重实现（bilibili fetcher 已是 yt-dlp+cookie 无需改；transcribe 已换 whisper.cpp/Metal），外挂它没有的两个 stage（硬字幕 OCR、多源融合）和一层 MCP 接口，做成一个 URL → 带溯源的可信逐字稿 的 Agent 摄取服务。
+以 `2phite/blisolver` 为骨架，换掉它的两个承重实现（bilibili fetcher 已是 yt-dlp+cookie 无需改；transcribe 已换 whisper.cpp/Metal），外挂它没有的两个 stage（硬字幕 OCR、多源融合）和一层 MCP 接口，做成一个 URL → 带溯源的可信逐字稿 的 Agent 摄取服务。
 
 ## 1. 实测确立的事实（阶段 A 产出）
 
-以下结论全部来自对本仓库 `harvest/` 的真实代码 + 真实视频 BV111o6BAEg4 的运行验证。
+以下结论全部来自对本仓库 `blisolver/` 的真实代码 + 真实视频 BV111o6BAEg4 的运行验证。
 
 ### 1.1 "有登录态就不需要爬"——成立，且比预想更彻底
 
-`harvest/subtitles.py` 的 `_acquire()` 本来就是 yt-dlp 路径：
+`blisolver/subtitles.py` 的 `_acquire()` 本来就是 yt-dlp 路径：
 
 ```python
 pick = _pick_track(info)              # 1) yt-dlp automatic_captions 拿 ai-zh
@@ -43,13 +43,13 @@ from .player_api import part_segments # 3) 只有为空才回退到手爬
 got = part_segments(canonical, settings, view=view)
 ```
 
-`ydl_opts` 默认 `browser_cookies=True`。README 里"bilibili 不向 yt-dlp 暴露 AI 字幕"那句**已被推翻**：用 `HARVEST_COOKIES_BROWSER=chrome` 时 yt-dlp 直接返回 `ai-zh/ai-en/ai-ja/ai-es/ai-ar`。
+`ydl_opts` 默认 `browser_cookies=True`。README 里"bilibili 不向 yt-dlp 暴露 AI 字幕"那句**已被推翻**：用 `BLISOLVER_COOKIES_BROWSER=chrome` 时 yt-dlp 直接返回 `ai-zh/ai-en/ai-ja/ai-es/ai-ar`。
 
 → **CC + AI 字幕两层零改写**。`player_api.part_segments`（字幕手爬回退）在我们环境下是死代码，可选删除以降维护面（`fetch_view`/`fetch_danmaku` 仍要保留）。
 
 ### 1.2 "能拿到字幕" ≠ "字幕可信"——质量门控必须保留
 
-实测 BV111o6BAEg4：yt-dlp+chrome cookie 拿到的 ai-zh 只有 1 条 cue，内容是广告垃圾（"敲重点↓↓↓投降 包村 拥 威信 扫"），时长 27s vs 视频 893s。harvest 的 tier-1 时长 sanity check（`last_end/duration ∈ [0.70, 1.10]`）**正确拒掉它**，降级到 whisper。
+实测 BV111o6BAEg4：yt-dlp+chrome cookie 拿到的 ai-zh 只有 1 条 cue，内容是广告垃圾（"敲重点↓↓↓投降 包村 拥 威信 扫"），时长 27s vs 视频 893s。blisolver 的 tier-1 时长 sanity check（`last_end/duration ∈ [0.70, 1.10]`）**正确拒掉它**，降级到 whisper。
 
 → **`quality.py` 是 cookie 路径唯一缺的安全网，原样保留**。它纯跑 `list[Segment]`，与抓取格式完全解耦，换路径它一行不改。这是"不爬"之后仍需要的把关层——两件事不矛盾。
 
@@ -70,13 +70,13 @@ got = part_segments(canonical, settings, view=view)
 - 复用 `subtitles.parse_srt` 解析 whisper-cli 的 SRT 输出回 `list[Segment]`
 - 删除 `_register_cuda_dlls()`（CUDA 死代码）
 - 修了重入 bug：输入已是 `.16k.wav` 时不再叠加后缀二次转码
-- 新增 env：`HARVEST_WHISPER_MODEL`（GGML .bin 路径，默认 `/tmp/ggml-medium.bin`）、`HARVEST_WHISPER_CLI`
+- 新增 env：`BLISOLVER_WHISPER_MODEL`（GGML .bin 路径，默认 `/tmp/ggml-medium.bin`）、`BLISOLVER_WHISPER_CLI`
 
 **验证**：363 segments，Metal 加速，与手动跑 whisper.cpp 结果逐字一致；端到端 ingest 产出 `out/BV111o6BAEg4-p1/{bundle.md, bundle.json}`。
 
 ### 1.4 降级链已端到端跑通
 
-`harvest ingest <url> --no-vision --no-frame-images` 完整流程：
+`blisolver ingest <url> --no-vision --no-frame-images` 完整流程：
 
 ```
 URL → resolve → probe(元数据) → provider.fetch_subtitle(yt-dlp+cookie + 质量门控)
@@ -145,9 +145,9 @@ class Bundle(BaseModel):
 
 ## 4. 新增 stage：硬字幕 OCR（移植 SubtitleExtractor）
 
-### 4.1 为什么 harvest 原视觉 stage 不够
+### 4.1 为什么 blisolver 原视觉 stage 不够
 
-harvest 的 `frames.py`：每 6s 抽一帧 → phash 去重 → VL 模型读画面。这对 PPT/教程录屏合适，但**抓不到烧录字幕**：一条硬字幕只显示 2–4s，6s 采样可能整段跳过；VL 模型生成的是画面说明，不是可复现的 OCR 字幕轨道。
+blisolver 的 `frames.py`：每 6s 抽一帧 → phash 去重 → VL 模型读画面。这对 PPT/教程录屏合适，但**抓不到烧录字幕**：一条硬字幕只显示 2–4s，6s 采样可能整段跳过；VL 模型生成的是画面说明，不是可复现的 OCR 字幕轨道。
 
 → **把"幻灯片笔记"和"硬字幕 OCR"拆成两个独立 stage**，采样策略和模型都不同。
 
@@ -164,20 +164,20 @@ harvest 的 `frames.py`：每 6s 抽一帧 → phash 去重 → VL 模型读画�
 
 移植内容：
 - 字幕区域检测（底部条带，可配）
-- **2–5 FPS 动态采样**（不是 harvest 的 6s；字幕显示 2–4s，必须密采）
+- **2–5 FPS 动态采样**（不是 blisolver 的 6s；字幕显示 2–4s，必须密采）
 - PaddleOCR（rec + det）
 - 时序去重：相邻帧文本相似度合并，取代表帧时间戳
 - 输出 `list[Segment]`（source="ocr"）
 
 ### 4.4 ⚠️ 依赖冲突风险（已从 SubtitleExtractor README 确认）
 
-SubtitleExtractor 让 ASR 跑在**独立子进程**，注释明说"以隔离 Faster-Whisper/ctranslate2 与 PaddleOCR 的原生运行时依赖"。移植 OCR stage 时必须沿用进程隔离，否则 PaddleOCR 的 native runtime 会污染 harvest 的 Python 环境。
+SubtitleExtractor 让 ASR 跑在**独立子进程**，注释明说"以隔离 Faster-Whisper/ctranslate2 与 PaddleOCR 的原生运行时依赖"。移植 OCR stage 时必须沿用进程隔离，否则 PaddleOCR 的 native runtime 会污染 blisolver 的 Python 环境。
 
-→ `ocr.py` 设计为**子进程 shim**（和 transcribe.py shell out 到 whisper-cli 同模式）：harvest 主进程通过 subprocess 调一个独立的 OCR worker 脚本，传视频路径、收 JSON。这样 PaddleOCR 装在独立 venv 里，不碰 harvest 的依赖图。
+→ `ocr.py` 设计为**子进程 shim**（和 transcribe.py shell out 到 whisper-cli 同模式）：blisolver 主进程通过 subprocess 调一个独立的 OCR worker 脚本，传视频路径、收 JSON。这样 PaddleOCR 装在独立 venv 里，不碰 blisolver 的依赖图。
 
 ## 5. 新增 stage：多源融合 `fuse.py`
 
-这是整个系统里最 research-y 的核心，不是脚注。harvest 现在假定单一 transcript 源（`Transcript` 单数），融合要支持多源。
+这是整个系统里最 research-y 的核心，不是脚注。blisolver 现在假定单一 transcript 源（`Transcript` 单数），融合要支持多源。
 
 ### 5.1 三类源的融合语义不同
 
@@ -206,9 +206,9 @@ SubtitleExtractor 让 ASR 跑在**独立子进程**，注释明说"以隔离 Fas
 
 ## 6. MCP 接口层
 
-把 harvest 的 CLI 能力包装成 MCP 工具，供 Agent 调用。
+把 blisolver 的 CLI 能力包装成 MCP 工具，供 Agent 调用。
 
-| 工具 | 入参 | 出参 | 对应 harvest 能力 |
+| 工具 | 入参 | 出参 | 对应 blisolver 能力 |
 |---|---|---|---|
 | `probe_video(url)` | B站/YouTube URL | `ProbeResult` JSON（元数据，不碰媒体） | `probe.py` |
 | `extract_transcript(url, mode)` | url, mode∈{auto,force_whisper,force_ocr} | job_id | `ingest`（异步） |
@@ -240,10 +240,10 @@ bundle.md + bundle.json（schema 1.1）+ MCP 可查
 |---|---|---|---|
 | faster-whisper/CUDA 在 M1 跑不了 | 实测 | ✅已解决 | 换 whisper.cpp/Metal shim |
 | AI 字幕被污染成广告垃圾 | 实测 BV111o6BAEg4 | ✅已修正结论 | 阶段 F 重测推翻：是采样 bug 假象，真 ai-zh 是好内容；quality.py 仍拒真坏的（歌曲循环♪，dup 0.88） |
-| PaddleOCR native runtime 污染 harvest 依赖 | SubtitleExtractor README | 待验证 | ocr.py 子进程隔离 |
+| PaddleOCR native runtime 污染 blisolver 依赖 | SubtitleExtractor README | 待验证 | ocr.py 子进程隔离 |
 | 字幕时间戳超视频时长（1.86x） | 实测 | 待定 | tier-1 区间 [0.70,1.10] 可能偏严，需多视频采样后定标 |
 | whisper medium 在 M1 要 ~40 分钟 | 实测 | 待优化 | 可换 small/ggml-large-v3 量化版；或后续接 SenseVoice |
-| harvest 是 0 star 单人项目 | GitHub 核实 | 接受 | 借设计不借代码栈；fork 后自主维护 |
+| blisolver 是 0 star 单人项目 | GitHub 核实 | 接受 | 借设计不借代码栈；fork 后自主维护 |
 | schema 破坏下游 | schema.py 注释 | 待定 | 1.0→1.1 纯加字段，老 bundle 仍可读 |
 
 ## 9. 执行顺序（建议）
@@ -263,13 +263,13 @@ bundle.md + bundle.json（schema 1.1）+ MCP 可查
 ```bash
 # 端到端 ingest（已跑通）——在仓库根目录执行
 cd /Users/mvgz0236/alttina/BliSolver
-HARVEST_COOKIES_BROWSER=chrome \
-HARVEST_WHISPER_MODEL=/tmp/ggml-medium.bin \
-HARVEST_WHISPER_CLI=/opt/homebrew/bin/whisper-cli \
-.venv/bin/harvest ingest "<bili url>" --no-vision --no-frame-images
+BLISOLVER_COOKIES_BROWSER=chrome \
+BLISOLVER_WHISPER_MODEL=/tmp/ggml-medium.bin \
+BLISOLVER_WHISPER_CLI=/opt/homebrew/bin/whisper-cli \
+.venv/bin/blisolver ingest "<bili url>" --no-vision --no-frame-images
 
 # 只 probe（廉价，不碰媒体）
-HARVEST_COOKIES_BROWSER=chrome .venv/bin/harvest probe "<bili url>"
+BLISOLVER_COOKIES_BROWSER=chrome .venv/bin/blisolver probe "<bili url>"
 
 # 直接拉 AI 字幕清单（验证 cookie 路径）
 yt-dlp --cookies-from-browser chrome --list-subs "<bili url>"

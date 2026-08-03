@@ -1,13 +1,13 @@
-# harvest — Domain Language
+# blisolver — Domain Language
 
-Shared vocabulary for harvest, the ingestion front-door for Atlas. This is a **glossary only** —
+Shared vocabulary for blisolver, the ingestion front-door for Atlas. This is a **glossary only** —
 what each term *means* as a domain fact, not how it's implemented (mechanisms live in the code;
 *what/why* lives in [SPEC.md](SPEC.md); the machine contract in [PROTOCOL.md](PROTOCOL.md)).
 
 ## Established tracks (anchors)
 
 **Bundle**:
-The self-contained per-part deliverable harvest emits (`out/<id>-p<part>/`). Everything below is
+The self-contained per-part deliverable blisolver emits (`out/<id>-p<part>/`). Everything below is
 either already in the bundle or a candidate to add to it.
 
 **Transcript**:
@@ -27,12 +27,12 @@ the client). The one danmaku signal that is a **platform fact of higher authorit
 surrounding mirror**, not crowd-opinion-to-be-doubted.
 
 **Authority ranking**:
-The trust order harvest records so Atlas can weigh competing signals: transcript (human-sub >
+The trust order blisolver records so Atlas can weigh competing signals: transcript (human-sub >
 whisper > auto-sub) ≫ everything crowd-sourced. Platform facts (like `high_like`) and uploader-
 authored content are carve-outs that rank above the crowd mirror.
 
 **Frame caption**:
-The visual note harvest extracts per kept frame. Has two distinct halves: the **OCR** (verbatim
+The visual note blisolver extracts per kept frame. Has two distinct halves: the **OCR** (verbatim
 on-screen text) and the **visual description** (a prose description of figures/diagrams/scene/
 layout). Both are produced today by one vision-model call.
 _Avoid_: "analyze" (say caption); conflating "OCR" (text only) with the whole caption.

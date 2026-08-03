@@ -1,4 +1,4 @@
-from harvest.vision import _parse
+from blisolver.vision import _parse
 
 
 def test_parse_splits_ocr_and_description():

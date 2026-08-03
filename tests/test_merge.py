@@ -2,8 +2,8 @@ import json
 
 import yaml
 
-from harvest.config import Settings
-from harvest.merge import (
+from blisolver.config import Settings
+from blisolver.merge import (
     _neutralize,
     build_bundle,
     chunk,
@@ -11,8 +11,8 @@ from harvest.merge import (
     render_markdown,
     write_bundle,
 )
-from harvest.providers.base import Canonical, SourceMetadata
-from harvest.schema import (
+from blisolver.providers.base import Canonical, SourceMetadata
+from blisolver.schema import (
     Bundle,
     Danmaku,
     DanmakuLine,
@@ -429,7 +429,7 @@ def test_render_markdown_description_with_literal_dashes_and_hash_line_is_safe()
 
 
 def test_bundle_json_roundtrips_new_fields(tmp_path):
-    from harvest.schema import Stats
+    from blisolver.schema import Stats
 
     bundle = _bundle_with_frame(None)
     bundle.uploader_id = "123"
@@ -741,7 +741,7 @@ def test_bundle_json_roundtrip_carries_complete_uncapped_danmaku(tmp_path):
 
 
 def test_render_interactions_section():
-    from harvest.merge import render_markdown
+    from blisolver.merge import render_markdown
     interactions = Interactions(
         votes=[
             Vote(
@@ -768,14 +768,14 @@ def test_render_interactions_section():
 
 
 def test_render_no_interactions_section_when_none():
-    from harvest.merge import render_markdown
+    from blisolver.merge import render_markdown
     bundle = _bundle()
     bundle.interactions = None
     assert "## Interactions" not in render_markdown(bundle, _settings())
 
 
 def test_render_no_interactions_section_when_empty():
-    from harvest.merge import render_markdown
+    from blisolver.merge import render_markdown
     bundle = _bundle()
     bundle.interactions = Interactions()  # requested, found nothing
     assert "## Interactions" not in render_markdown(bundle, _settings())
@@ -783,7 +783,7 @@ def test_render_no_interactions_section_when_empty():
 
 def test_build_bundle_threads_interactions():
     # extend the existing build_bundle test path: build_bundle accepts interactions= and sets it
-    from harvest.merge import build_bundle
+    from blisolver.merge import build_bundle
     meta = SourceMetadata(
         platform="bilibili.com", id="BV1", title="View Title", uploader="View Owner",
         uploader_id="999", description="View description.", duration_s=123,
@@ -797,7 +797,7 @@ def test_build_bundle_threads_interactions():
 
 
 def test_write_bundle_dir_name_format_with_sanitized_title(tmp_path):
-    from harvest.merge import write_bundle, _sanitize_filename
+    from blisolver.merge import write_bundle, _sanitize_filename
     assert _sanitize_filename("力工？喜欢:梭哈？坏了！") == "力工？喜欢 梭哈？坏了！"
 
     bundle = _bundle()

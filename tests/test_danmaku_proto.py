@@ -1,4 +1,4 @@
-"""Tests for `harvest.danmaku_proto.decode_seg` -- the dependency-free protobuf decoder for
+"""Tests for `blisolver.danmaku_proto.decode_seg` -- the dependency-free protobuf decoder for
 bilibili's danmaku census endpoint (`x/v2/dm/web/seg.so`, `DmSegMobileReply`).
 
 The fixture (`tests/fixtures/bilibili/seg_sample.bin`) is SYNTHESIZED here via a tiny inline
@@ -6,7 +6,7 @@ protobuf ENCODER (mirrors the wire format: tag = (field<<3)|wiretype as a varint
 or length-delimited payload) rather than captured live off a real video -- a live capture needs
 network + cookies and yields an opaque blob we can't precisely control. Synthesizing keeps this
 test fully offline/hermetic while letting us assert exact known values, including a HighLike
-(attr bit2) elem. The encoder is TEST-ONLY: shipped code (`harvest/danmaku_proto.py`) only ever
+(attr bit2) elem. The encoder is TEST-ONLY: shipped code (`blisolver/danmaku_proto.py`) only ever
 decodes, never encodes.
 """
 
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from harvest.danmaku_proto import RawDanmaku, decode_seg
+from blisolver.danmaku_proto import RawDanmaku, decode_seg
 
 _FIXTURE_PATH = Path(__file__).parent / "fixtures" / "bilibili" / "seg_sample.bin"
 

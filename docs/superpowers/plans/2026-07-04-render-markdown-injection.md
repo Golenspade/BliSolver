@@ -4,13 +4,13 @@
 
 **Goal:** Make `bundle.md`'s frontmatter always-valid YAML and its untrusted body text inert against markdown-structure forging, and nest transcript windows under a `## Transcript` section.
 
-**Architecture:** All changes live in `render_markdown()` in `harvest/merge.py` plus a one-line dependency add. Frontmatter is serialized with PyYAML instead of bare f-strings; untrusted free-text fields pass through a line-by-line `_neutralize()` escaper; transcript chunks gain a `## Transcript` parent and drop from `## [mm:ss]` to `### [mm:ss]`. `write_bundle()` and `bundle.json` are untouched.
+**Architecture:** All changes live in `render_markdown()` in `blisolver/merge.py` plus a one-line dependency add. Frontmatter is serialized with PyYAML instead of bare f-strings; untrusted free-text fields pass through a line-by-line `_neutralize()` escaper; transcript chunks gain a `## Transcript` parent and drop from `## [mm:ss]` to `### [mm:ss]`. `write_bundle()` and `bundle.json` are untouched.
 
 **Tech Stack:** Python 3.11+, PyYAML 6, pydantic, pytest.
 
 ## Global Constraints
 
-- Target file for all code changes: `harvest/merge.py`. Test file: `tests/test_merge.py`.
+- Target file for all code changes: `blisolver/merge.py`. Test file: `tests/test_merge.py`.
 - `requires-python = ">=3.11"`; do not use newer syntax.
 - `bundle.json` output and `write_bundle()` behavior must not change.
 - Preserve the existing frontmatter field order exactly: platform, id, part, url, title, uploader, uploader_id, thumbnail_url, duration, published_at, fetched_at, transcript_source, vision_model, tool_version.
@@ -24,7 +24,7 @@
 
 **Files:**
 - Modify: `pyproject.toml` (add `pyyaml` to `dependencies`)
-- Modify: `harvest/merge.py` (imports + frontmatter block in `render_markdown`)
+- Modify: `blisolver/merge.py` (imports + frontmatter block in `render_markdown`)
 - Test: `tests/test_merge.py`
 
 **Interfaces:**
@@ -104,7 +104,7 @@ dependencies = [
 ]
 ```
 
-In `harvest/merge.py`, add the import after the stdlib imports (line ~13):
+In `blisolver/merge.py`, add the import after the stdlib imports (line ~13):
 
 ```python
 import yaml
@@ -211,7 +211,7 @@ Expected: PASS (all tests green).
 - [ ] **Step 7: Commit**
 
 ```bash
-git add pyproject.toml harvest/merge.py tests/test_merge.py
+git add pyproject.toml blisolver/merge.py tests/test_merge.py
 git commit -m "fix(merge): emit bundle.md frontmatter via PyYAML (#11 Bug A)"
 ```
 
@@ -220,7 +220,7 @@ git commit -m "fix(merge): emit bundle.md frontmatter via PyYAML (#11 Bug A)"
 ### Task 2: Transcript section nesting
 
 **Files:**
-- Modify: `harvest/merge.py` (`render_markdown` transcript block)
+- Modify: `blisolver/merge.py` (`render_markdown` transcript block)
 - Test: `tests/test_merge.py`
 
 **Interfaces:**
@@ -274,7 +274,7 @@ Expected: FAIL — `"## Transcript"` is not in the output and windows are still 
 
 - [ ] **Step 3: Implement the restructure**
 
-In `harvest/merge.py`, in `render_markdown`, replace the transcript block. Change from:
+In `blisolver/merge.py`, in `render_markdown`, replace the transcript block. Change from:
 
 ```python
     if not t.segments and not bundle.frames:
@@ -324,7 +324,7 @@ Expected: PASS (all green, including the two new transcript tests).
 - [ ] **Step 6: Commit**
 
 ```bash
-git add harvest/merge.py tests/test_merge.py
+git add blisolver/merge.py tests/test_merge.py
 git commit -m "feat(merge): nest transcript windows under ## Transcript (#11)"
 ```
 
@@ -333,7 +333,7 @@ git commit -m "feat(merge): nest transcript windows under ## Transcript (#11)"
 ### Task 3: Neutralize untrusted body text (Bug B)
 
 **Files:**
-- Modify: `harvest/merge.py` (`_neutralize` helper + apply to body fields)
+- Modify: `blisolver/merge.py` (`_neutralize` helper + apply to body fields)
 - Test: `tests/test_merge.py`
 
 **Interfaces:**
@@ -397,7 +397,7 @@ def test_danmaku_line_with_embedded_newline_cannot_forge_section():
 
 Add the `_neutralize` import to the existing merge import line at the top of the test file:
 ```python
-from harvest.merge import (
+from blisolver.merge import (
     HIGH_LIKE_MD_CAP,
     _neutralize,
     build_bundle,
@@ -415,10 +415,10 @@ Expected: FAIL — `_neutralize` is not importable / forged markers are unescape
 
 - [ ] **Step 3: Implement `_neutralize` and apply it**
 
-In `harvest/merge.py`, add `import re` to the stdlib imports (line ~9) and add the helper below `_mmss`:
+In `blisolver/merge.py`, add `import re` to the stdlib imports (line ~9) and add the helper below `_mmss`:
 
 ```python
-# Lines whose first non-whitespace content forges harvest's section grammar: a #-run heading,
+# Lines whose first non-whitespace content forges blisolver's section grammar: a #-run heading,
 # a ---/***/___ thematic break, or a ```/~~~ code fence. bundle.md delimits sections with these
 # markers rather than fenced blocks, so untrusted body text that leads with one could manufacture
 # a fake ## Transcript / ## Danmaku section or close the frontmatter. We backslash-escape the
@@ -504,7 +504,7 @@ Expected: PASS (no regressions elsewhere).
 - [ ] **Step 8: Commit**
 
 ```bash
-git add harvest/merge.py tests/test_merge.py
+git add blisolver/merge.py tests/test_merge.py
 git commit -m "fix(merge): neutralize untrusted body text in bundle.md (#11 Bug B)"
 ```
 

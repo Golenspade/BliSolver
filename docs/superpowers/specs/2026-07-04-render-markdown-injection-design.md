@@ -4,7 +4,7 @@ Issue: #11.
 
 ## Problem
 
-`render_markdown()` in [`harvest/merge.py`](../../../harvest/merge.py) builds `bundle.md` by raw
+`render_markdown()` in [`blisolver/merge.py`](../../../blisolver/merge.py) builds `bundle.md` by raw
 f-string interpolation of attacker-controlled fields (`title`, `description`, transcript text,
 danmaku text) with no escaping. Two defects follow, plus one adjacent structural nit surfaced
 while reviewing the output.
@@ -17,11 +17,11 @@ YAML. `title: Rust: The Book` -> parse error; a leading `[`/`{`/`"` is parsed as
 collection / quoted scalar. The example bundle only survives because its title uses a full-width
 colon (`：`), not ASCII `:`.
 
-### Bug B — verbatim body content forges harvest's section grammar
+### Bug B — verbatim body content forges blisolver's section grammar
 
 `description` (and, to a lesser degree, transcript/danmaku text) is written verbatim. Because
-harvest delimits sections with `## ` headings rather than fenced blocks, a description can
-manufacture harvest's *own* sections — a fake `## [00:00]` transcript chunk, a fake `## Danmaku`
+blisolver delimits sections with `## ` headings rather than fenced blocks, a description can
+manufacture blisolver's *own* sections — a fake `## [00:00]` transcript chunk, a fake `## Danmaku`
 block, a `---` — indistinguishable from tool-produced structure to a consumer reading `bundle.md`.
 No code execution (the file is only written and read), but the output contract is not robust
 against hostile field content.
@@ -36,7 +36,7 @@ per-window items sit at H2 with no parent section.
 ## Goals
 
 1. Emit frontmatter that is always valid YAML, whatever the field content.
-2. Make untrusted body text inert — it must not be able to forge harvest's `#`-heading /
+2. Make untrusted body text inert — it must not be able to forge blisolver's `#`-heading /
    `---` / code-fence grammar.
 3. Give the transcript a parent `## Transcript` section and nest its windows at `### [mm:ss]`,
    mirroring `## Danmaku` / `### [mm:ss]`.
@@ -47,7 +47,7 @@ per-window items sit at H2 with no parent section.
 - Fixing the pre-existing early-return behavior where danmaku is dropped when there is no
   transcript and no frames. Preserved as-is (heading placement aside).
 - Neutralizing mid-line markdown (inline `#hashtag`, inline backticks). Only line-leading
-  structural markers can forge harvest's section grammar, so only those are escaped.
+  structural markers can forge blisolver's section grammar, so only those are escaped.
 
 ## Design
 
@@ -79,7 +79,7 @@ A module-level helper:
 
 ```python
 def _neutralize(text: str) -> str:
-    """Backslash-escape any line whose first non-whitespace content could forge harvest's
+    """Backslash-escape any line whose first non-whitespace content could forge blisolver's
     section grammar (a #-run heading, a ---/***/___ thematic break, or a ```/~~~ code fence),
     so untrusted body text cannot manufacture headings, rules, or fences. Line-by-line, so it
     also catches markers after an embedded newline. Renders visually identical in a markdown

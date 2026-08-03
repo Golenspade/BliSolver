@@ -1,4 +1,4 @@
-from harvest.resolve import Canonical, resolve
+from blisolver.resolve import Canonical, resolve
 
 
 def test_com_bv_default_part_is_1():
@@ -100,8 +100,8 @@ def test_complex_spm_tracking_query():
 
 
 def test_select_provider_with_messy_input():
-    from harvest.providers.base import select_provider
-    from harvest.providers.bilibili import BilibiliProvider
+    from blisolver.providers.base import select_provider
+    from blisolver.providers.bilibili import BilibiliProvider
 
     raw = "【分享视频】 https://www.bilibili.com/video/BV1x2T463E7L?p=2"
     provider = select_provider(raw)

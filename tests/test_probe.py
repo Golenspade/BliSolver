@@ -1,10 +1,10 @@
 import pytest
 
-from harvest.config import Settings
-from harvest.player_api import ViewError
-from harvest.probe import probe
-from harvest.resolve import Canonical
-from harvest.schema import ProbeResult
+from blisolver.config import Settings
+from blisolver.player_api import ViewError
+from blisolver.probe import probe
+from blisolver.resolve import Canonical
+from blisolver.schema import ProbeResult
 from tests.test_player_api import _FakeOpener, _view_url
 
 
@@ -125,14 +125,14 @@ def test_probe_propagates_view_error():
 
 
 def test_schema_version_is_1_1():
-    from harvest.schema import SCHEMA_VERSION
+    from blisolver.schema import SCHEMA_VERSION
     assert SCHEMA_VERSION == "1.1"
 
 
 def test_segment_provenance_fields_optional_for_legacy_bundles():
     # 1.1 additive: Segment.source/confidence default None, so a 1.0 cue (no provenance) round-
     # trips and old consumers that ignore the fields are unaffected.
-    from harvest.schema import Segment
+    from blisolver.schema import Segment
     s = Segment(start=0.0, end=1.0, text="hi")
     assert s.source is None
     assert s.confidence is None
@@ -144,7 +144,7 @@ def test_segment_provenance_fields_optional_for_legacy_bundles():
 def test_bundle_ocr_track_optional_and_independent_of_transcript():
     # 1.1 additive: Bundle.ocr defaults None; when present it is a separate timeline whose
     # cues carry source="ocr". The picked `transcript` field is the unchanged authority.
-    from harvest.schema import Bundle
+    from blisolver.schema import Bundle
     b = Bundle(
         platform="bilibili.com", id="BV1", part=1, url="u", fetched_at="2026-01-01T00:00:00Z",
         meta={"cookies_used": True, "referer_used": True, "tool_version": "x"},
@@ -161,7 +161,7 @@ def test_bundle_ocr_track_optional_and_independent_of_transcript():
 
 
 def test_probe_result_uses_uploader_id_string():
-    from harvest.schema import ProbeResult
+    from blisolver.schema import ProbeResult
     r = ProbeResult(platform="youtube.com", id="x", uploader_id="UCabc", parts=1)
     assert r.uploader_id == "UCabc"
     assert not hasattr(r, "uploader_mid")
@@ -170,16 +170,16 @@ def test_probe_result_uses_uploader_id_string():
 def test_probe_youtube_delegates_to_provider(monkeypatch):
     import sys
 
-    import harvest  # noqa: F401  ensure harvest.probe submodule is registered in sys.modules
+    import blisolver  # noqa: F401  ensure blisolver.probe submodule is registered in sys.modules
 
-    from harvest.providers.base import Canonical, SourceMetadata
+    from blisolver.providers.base import Canonical, SourceMetadata
 
-    # NOTE: `harvest/__init__.py` does `from .probe import probe`, which shadows the
-    # `harvest.probe` *submodule* with the `probe` *function* as a package attribute. So
-    # `from harvest import probe` gets the function, not the module. Go via sys.modules to
+    # NOTE: `blisolver/__init__.py` does `from .probe import probe`, which shadows the
+    # `blisolver.probe` *submodule* with the `probe` *function* as a package attribute. So
+    # `from blisolver import probe` gets the function, not the module. Go via sys.modules to
     # reach the real module object for monkeypatching `select_provider`.
-    probe_mod = sys.modules["harvest.probe"]
-    from harvest.schema import ProbeResult
+    probe_mod = sys.modules["blisolver.probe"]
+    from blisolver.schema import ProbeResult
 
     canonical = Canonical("youtube.com", "dQw4w9WgXcQ", 1, "https://youtu.be/dQw4w9WgXcQ")
 

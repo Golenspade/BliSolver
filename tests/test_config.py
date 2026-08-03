@@ -1,14 +1,14 @@
 from pathlib import Path
 
-import harvest.config as config
-from harvest.config import Settings, find_js_runtime
+import blisolver.config as config
+from blisolver.config import Settings, find_js_runtime
 
 
-def test_load_reads_harvest_env_keys(monkeypatch, tmp_path):
-    monkeypatch.setenv("HARVEST_COOKIES_BROWSER", "chrome")
-    monkeypatch.setenv("HARVEST_COOKIES_PROFILE", "Default")
-    monkeypatch.setenv("HARVEST_CACHE_DIR", str(tmp_path / "c"))
-    monkeypatch.setenv("HARVEST_OUT_DIR", str(tmp_path / "o"))
+def test_load_reads_blisolver_env_keys(monkeypatch, tmp_path):
+    monkeypatch.setenv("BLISOLVER_COOKIES_BROWSER", "chrome")
+    monkeypatch.setenv("BLISOLVER_COOKIES_PROFILE", "Default")
+    monkeypatch.setenv("BLISOLVER_CACHE_DIR", str(tmp_path / "c"))
+    monkeypatch.setenv("BLISOLVER_OUT_DIR", str(tmp_path / "o"))
     monkeypatch.setenv("BILI_COOKIES_BROWSER", "firefox")  # old key must be ignored
     s = Settings.load()
     assert s.cookies_browser == "chrome"
@@ -26,29 +26,29 @@ def test_chunk_window_s_default_is_60_for_minute_alignment():
 def test_danmaku_window_s_default_is_15_and_env_overridable(monkeypatch):
     # 15s: the empirically-validated danmaku bucket width (one crowd "beat" per window),
     # decoupled from the frame/transcript chunk cadence.
-    monkeypatch.delenv("HARVEST_DANMAKU_WINDOW_S", raising=False)
+    monkeypatch.delenv("BLISOLVER_DANMAKU_WINDOW_S", raising=False)
     assert Settings.load().danmaku_window_s == 15.0
-    monkeypatch.setenv("HARVEST_DANMAKU_WINDOW_S", "20")
+    monkeypatch.setenv("BLISOLVER_DANMAKU_WINDOW_S", "20")
     assert Settings.load().danmaku_window_s == 20.0
 
 
 def test_danmaku_md_cap_default_is_15_and_env_overridable(monkeypatch):
-    monkeypatch.delenv("HARVEST_DANMAKU_MD_CAP", raising=False)
+    monkeypatch.delenv("BLISOLVER_DANMAKU_MD_CAP", raising=False)
     assert Settings.load().danmaku_md_cap == 15
-    monkeypatch.setenv("HARVEST_DANMAKU_MD_CAP", "25")
+    monkeypatch.setenv("BLISOLVER_DANMAKU_MD_CAP", "25")
     assert Settings.load().danmaku_md_cap == 25
 
 
 def test_youtube_cookies_defaults_off(monkeypatch):
-    monkeypatch.delenv("HARVEST_YT_COOKIES", raising=False)
+    monkeypatch.delenv("BLISOLVER_YT_COOKIES", raising=False)
     assert Settings.load().youtube_cookies is False
 
 
 def test_youtube_cookies_opt_in_via_env(monkeypatch):
     for val in ("1", "true", "YES", "on"):
-        monkeypatch.setenv("HARVEST_YT_COOKIES", val)
+        monkeypatch.setenv("BLISOLVER_YT_COOKIES", val)
         assert Settings.load().youtube_cookies is True, val
-    monkeypatch.setenv("HARVEST_YT_COOKIES", "0")
+    monkeypatch.setenv("BLISOLVER_YT_COOKIES", "0")
     assert Settings.load().youtube_cookies is False
 
 
@@ -96,7 +96,7 @@ def test_find_js_runtime_none_when_absent(monkeypatch, tmp_path):
     assert find_js_runtime() is None
 
 
-from harvest.config import AutoSubNet, Settings
+from blisolver.config import AutoSubNet, Settings
 
 
 def test_settings_has_youtube_auto_net_defaults():

@@ -23,19 +23,19 @@
 
 ## File Structure
 
-- **Create `harvest/interactions_proto.py`** — dependency-free protobuf decode of `DmWebViewReply.commandDms` → `list[RawCommandDm]`. Decode only, never encode (mirrors `danmaku_proto.py`).
-- **Create `harvest/interactions.py`** — `build_interactions(raws)` (pure: whitelist + parse each `extra` JSON → schema) and `fetch_interactions(canonical, settings, ...)` (HTTP GET the view endpoint, decode, build). No LLM.
-- **Modify `harvest/schema.py`** — add `VoteOption`, `Vote`, `Grade`, `Interactions`; add `Bundle.interactions: Interactions | None = None`.
-- **Modify `harvest/merge.py`** — `build_bundle(...)` gains an `interactions` kwarg; `render_markdown` renders a `## Interactions` section.
-- **Modify `harvest/providers/bilibili.py`** — thin `fetch_interactions` passthrough method.
-- **Modify `harvest/cli.py`** — `--interactions` argparse flag + per-part wiring.
+- **Create `blisolver/interactions_proto.py`** — dependency-free protobuf decode of `DmWebViewReply.commandDms` → `list[RawCommandDm]`. Decode only, never encode (mirrors `danmaku_proto.py`).
+- **Create `blisolver/interactions.py`** — `build_interactions(raws)` (pure: whitelist + parse each `extra` JSON → schema) and `fetch_interactions(canonical, settings, ...)` (HTTP GET the view endpoint, decode, build). No LLM.
+- **Modify `blisolver/schema.py`** — add `VoteOption`, `Vote`, `Grade`, `Interactions`; add `Bundle.interactions: Interactions | None = None`.
+- **Modify `blisolver/merge.py`** — `build_bundle(...)` gains an `interactions` kwarg; `render_markdown` renders a `## Interactions` section.
+- **Modify `blisolver/providers/bilibili.py`** — thin `fetch_interactions` passthrough method.
+- **Modify `blisolver/cli.py`** — `--interactions` argparse flag + per-part wiring.
 
 ---
 
 ### Task 1: Schema types
 
 **Files:**
-- Modify: `harvest/schema.py` (add types after the `Danmaku` block, ~line 143; add field to `Bundle`, ~line 163)
+- Modify: `blisolver/schema.py` (add types after the `Danmaku` block, ~line 143; add field to `Bundle`, ~line 163)
 - Test: `tests/test_interactions.py` (create)
 
 **Interfaces:**
@@ -58,7 +58,7 @@ a fake opener, and the decode tests synthesize protobuf inline (no network, no c
 
 from __future__ import annotations
 
-from harvest.schema import Bundle, Grade, Interactions, Vote, VoteOption
+from blisolver.schema import Bundle, Grade, Interactions, Vote, VoteOption
 
 
 def test_interactions_types_roundtrip():
@@ -101,11 +101,11 @@ def test_bundle_interactions_defaults_none():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `.venv/Scripts/python.exe -m pytest tests/test_interactions.py -v`
-Expected: FAIL with `ImportError: cannot import name 'Interactions' from 'harvest.schema'`
+Expected: FAIL with `ImportError: cannot import name 'Interactions' from 'blisolver.schema'`
 
 - [ ] **Step 3: Write minimal implementation**
 
-In `harvest/schema.py`, add after the `Danmaku` class (before `class Bundle`):
+In `blisolver/schema.py`, add after the `Danmaku` class (before `class Bundle`):
 
 ```python
 class VoteOption(BaseModel):
@@ -169,7 +169,7 @@ Expected: PASS (3 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add harvest/schema.py tests/test_interactions.py
+git add blisolver/schema.py tests/test_interactions.py
 git commit -m "feat(schema): add Vote/Grade/Interactions types, additive to 1.0"
 ```
 
@@ -178,7 +178,7 @@ git commit -m "feat(schema): add Vote/Grade/Interactions types, additive to 1.0"
 ### Task 2: Protobuf decode of `commandDms`
 
 **Files:**
-- Create: `harvest/interactions_proto.py`
+- Create: `blisolver/interactions_proto.py`
 - Test: `tests/test_interactions_proto.py` (create)
 
 **Interfaces:**
@@ -192,7 +192,7 @@ git commit -m "feat(schema): add Vote/Grade/Interactions types, additive to 1.0"
 Create `tests/test_interactions_proto.py`:
 
 ```python
-"""Tests for `harvest.interactions_proto.decode_view` — the dependency-free protobuf decoder for
+"""Tests for `blisolver.interactions_proto.decode_view` — the dependency-free protobuf decoder for
 bilibili's command-danmaku view endpoint (`x/v2/dm/web/view`, `DmWebViewReply.commandDms`).
 
 Fixtures are SYNTHESIZED inline via a tiny test-only protobuf encoder (mirrors the wire format:
@@ -202,7 +202,7 @@ offline while asserting exact known values. Shipped code only ever DECODES."""
 
 from __future__ import annotations
 
-from harvest.interactions_proto import RawCommandDm, decode_view
+from blisolver.interactions_proto import RawCommandDm, decode_view
 
 
 def _varint(n: int) -> bytes:
@@ -276,11 +276,11 @@ def test_decode_view_no_command_dms_is_empty_list():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `.venv/Scripts/python.exe -m pytest tests/test_interactions_proto.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'harvest.interactions_proto'`
+Expected: FAIL with `ModuleNotFoundError: No module named 'blisolver.interactions_proto'`
 
 - [ ] **Step 3: Write minimal implementation**
 
-Create `harvest/interactions_proto.py`:
+Create `blisolver/interactions_proto.py`:
 
 ```python
 """Dependency-free protobuf decoder for bilibili's command-danmaku view endpoint
@@ -383,7 +383,7 @@ Expected: PASS (4 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add harvest/interactions_proto.py tests/test_interactions_proto.py
+git add blisolver/interactions_proto.py tests/test_interactions_proto.py
 git commit -m "feat(interactions): decode DmWebViewReply.commandDms (dependency-free)"
 ```
 
@@ -392,7 +392,7 @@ git commit -m "feat(interactions): decode DmWebViewReply.commandDms (dependency-
 ### Task 3: Build + fetch interactions
 
 **Files:**
-- Create: `harvest/interactions.py`
+- Create: `blisolver/interactions.py`
 - Test: `tests/test_interactions.py` (extend — created in Task 1)
 
 **Interfaces:**
@@ -406,11 +406,11 @@ git commit -m "feat(interactions): decode DmWebViewReply.commandDms (dependency-
 Append to `tests/test_interactions.py`:
 
 ```python
-from harvest.interactions import build_interactions, fetch_interactions
-from harvest.interactions_proto import RawCommandDm
-from harvest.config import Settings
-from harvest.resolve import Canonical
-from harvest.player_api import ViewData
+from blisolver.interactions import build_interactions, fetch_interactions
+from blisolver.interactions_proto import RawCommandDm
+from blisolver.config import Settings
+from blisolver.resolve import Canonical
+from blisolver.player_api import ViewData
 
 
 _VOTE_EXTRA = (
@@ -514,11 +514,11 @@ def test_fetch_interactions_no_cid_returns_empty():
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `.venv/Scripts/python.exe -m pytest tests/test_interactions.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'harvest.interactions'`
+Expected: FAIL with `ModuleNotFoundError: No module named 'blisolver.interactions'`
 
 - [ ] **Step 3: Write minimal implementation**
 
-Create `harvest/interactions.py`:
+Create `blisolver/interactions.py`:
 
 ```python
 """Command-danmaku (互动弹幕) acquisition: fetch `x/v2/dm/web/view`, decode `commandDms`, and build
@@ -637,7 +637,7 @@ Expected: PASS (all Task 1 + Task 3 tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add harvest/interactions.py tests/test_interactions.py
+git add blisolver/interactions.py tests/test_interactions.py
 git commit -m "feat(interactions): fetch + build votes/grades from x/v2/dm/web/view"
 ```
 
@@ -646,7 +646,7 @@ git commit -m "feat(interactions): fetch + build votes/grades from x/v2/dm/web/v
 ### Task 4: Render + bundle plumbing
 
 **Files:**
-- Modify: `harvest/merge.py` (`build_bundle` ~line 114-140; `render_markdown` — add section after the danmaku block ~line 237; import `Interactions` ~line 20)
+- Modify: `blisolver/merge.py` (`build_bundle` ~line 114-140; `render_markdown` — add section after the danmaku block ~line 237; import `Interactions` ~line 20)
 - Test: `tests/test_merge.py` (extend)
 
 **Interfaces:**
@@ -658,11 +658,11 @@ git commit -m "feat(interactions): fetch + build votes/grades from x/v2/dm/web/v
 Append to `tests/test_merge.py` (reuse its existing `_bundle`/`_settings` helpers; check their signatures at the top of the file and pass `interactions=` through if `_bundle` forwards kwargs to `build_bundle`, else construct a `Bundle` with `interactions=` directly):
 
 ```python
-from harvest.schema import Interactions, Vote, VoteOption, Grade
+from blisolver.schema import Interactions, Vote, VoteOption, Grade
 
 
 def test_render_interactions_section():
-    from harvest.merge import render_markdown
+    from blisolver.merge import render_markdown
     interactions = Interactions(
         votes=[
             Vote(
@@ -689,14 +689,14 @@ def test_render_interactions_section():
 
 
 def test_render_no_interactions_section_when_none():
-    from harvest.merge import render_markdown
+    from blisolver.merge import render_markdown
     bundle = _bundle()
     bundle.interactions = None
     assert "## Interactions" not in render_markdown(bundle, _settings())
 
 
 def test_render_no_interactions_section_when_empty():
-    from harvest.merge import render_markdown
+    from blisolver.merge import render_markdown
     bundle = _bundle()
     bundle.interactions = Interactions()  # requested, found nothing
     assert "## Interactions" not in render_markdown(bundle, _settings())
@@ -704,7 +704,7 @@ def test_render_no_interactions_section_when_empty():
 
 def test_build_bundle_threads_interactions():
     # extend the existing build_bundle test path: build_bundle accepts interactions= and sets it
-    from harvest.merge import build_bundle
+    from blisolver.merge import build_bundle
     interactions = Interactions(grades=[Grade(avg_score=8.0, count=5)])
     bundle = _build_bundle_under_test(interactions=interactions)  # see note below
     assert bundle.interactions == interactions
@@ -719,7 +719,7 @@ Expected: FAIL — `build_bundle() got an unexpected keyword argument 'interacti
 
 - [ ] **Step 3: Write minimal implementation**
 
-In `harvest/merge.py`:
+In `blisolver/merge.py`:
 
 1. Extend the schema import (line ~20):
 
@@ -792,7 +792,7 @@ Expected: PASS (all prior tests + the new ones)
 - [ ] **Step 6: Commit**
 
 ```bash
-git add harvest/merge.py tests/test_merge.py
+git add blisolver/merge.py tests/test_merge.py
 git commit -m "feat(interactions): thread through build_bundle + render ## Interactions"
 ```
 
@@ -801,13 +801,13 @@ git commit -m "feat(interactions): thread through build_bundle + render ## Inter
 ### Task 5: CLI flag + provider wiring
 
 **Files:**
-- Modify: `harvest/providers/bilibili.py` (add `fetch_interactions` method + import ~line 17, 72)
-- Modify: `harvest/cli.py` (argparse flag ~line 65; wiring ~line 165-186; import ~line 16)
+- Modify: `blisolver/providers/bilibili.py` (add `fetch_interactions` method + import ~line 17, 72)
+- Modify: `blisolver/cli.py` (argparse flag ~line 65; wiring ~line 165-186; import ~line 16)
 - Test: `tests/test_interactions.py` (extend — provider passthrough); manual CLI smoke.
 
 **Interfaces:**
 - Consumes: `interactions.fetch_interactions` (Task 3); `build_bundle(..., interactions=)` (Task 4).
-- Produces: `BilibiliProvider.fetch_interactions(canonical, settings, *, opener=None, view=None) -> Interactions`; `harvest ingest --interactions` populates `bundle.interactions` on bilibili, leaves it `None` elsewhere.
+- Produces: `BilibiliProvider.fetch_interactions(canonical, settings, *, opener=None, view=None) -> Interactions`; `blisolver ingest --interactions` populates `bundle.interactions` on bilibili, leaves it `None` elsewhere.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -815,7 +815,7 @@ Append to `tests/test_interactions.py`:
 
 ```python
 def test_bilibili_provider_fetch_interactions_passthrough():
-    from harvest.providers.bilibili import BilibiliProvider
+    from blisolver.providers.bilibili import BilibiliProvider
     from tests.test_interactions_proto import _command_dm
 
     canonical = Canonical(platform="bilibili.com", id="BV1x", part=1, url="u")
@@ -838,9 +838,9 @@ Expected: FAIL with `AttributeError: 'BilibiliProvider' object has no attribute 
 
 - [ ] **Step 3: Write minimal implementation**
 
-In `harvest/providers/bilibili.py`:
+In `blisolver/providers/bilibili.py`:
 
-1. Extend the `player_api` import group (near line 17) to add nothing (fetch_interactions lives in `harvest.interactions`); instead add a new import:
+1. Extend the `player_api` import group (near line 17) to add nothing (fetch_interactions lives in `blisolver.interactions`); instead add a new import:
 
 ```python
 from ..interactions import fetch_interactions
@@ -855,7 +855,7 @@ from ..interactions import fetch_interactions
         return fetch_interactions(canonical, settings, opener=opener, view=view)
 ```
 
-In `harvest/cli.py`:
+In `blisolver/cli.py`:
 
 3. Add the import (near line 16, beside `from .danmaku import represent_danmaku`):
 
@@ -909,7 +909,7 @@ Expected: PASS (whole suite green)
 Run against the spike's known grade+vote video:
 
 ```bash
-.venv/Scripts/python.exe -m harvest ingest "https://www.bilibili.com/video/BV1RnAuz6E29" --interactions --no-vision --force-whisper --out ./out 2>&1 | tail -20
+.venv/Scripts/python.exe -m blisolver ingest "https://www.bilibili.com/video/BV1RnAuz6E29" --interactions --no-vision --force-whisper --out ./out 2>&1 | tail -20
 ```
 
 Expected: `out/BV1RnAuz6E29-p1/bundle.json` has a non-null `interactions` with ≥1 grade (`avg_score` ~9.9) and ≥1 vote; `bundle.md` shows a `## Interactions` section. (If cookies/model unavailable, skip — the hermetic suite already covers the logic.)
@@ -917,7 +917,7 @@ Expected: `out/BV1RnAuz6E29-p1/bundle.json` has a non-null `interactions` with �
 - [ ] **Step 7: Commit**
 
 ```bash
-git add harvest/cli.py harvest/providers/bilibili.py tests/test_interactions.py
+git add blisolver/cli.py blisolver/providers/bilibili.py tests/test_interactions.py
 git commit -m "feat(cli): wire --interactions opt-in (bilibili command danmaku)"
 ```
 

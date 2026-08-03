@@ -7,7 +7,7 @@ Issue: #5. Follow-up to #3 (the `StopIteration` audio-download bug, already merg
 yt-dlp 2026.06.09 needs a JavaScript runtime to drive YouTube's web player client. On a box
 without one (only `deno` is auto-enabled by yt-dlp, and it may be absent), extraction
 **intermittently** falls back to a stripped/blocked response — placeholder `title`
-(e.g. `recommended`), no `duration`, no `language`, no `subtitles`. harvest then writes a
+(e.g. `recommended`), no `duration`, no `language`, no `subtitles`. blisolver then writes a
 corrupt bundle and misses human subtitles, falling back to Whisper unnecessarily.
 
 ### What was verified
@@ -18,11 +18,11 @@ corrupt bundle and misses human subtitles, falling back to Whisper unnecessarily
 - A JS runtime does **not** fully solve YouTube's `nsig` challenge — yt-dlp still logs
   `n challenge solving failed` and asks for the EJS solver component
   (`--remote-components ejs:github` / `ejs:npm`). That only risks dropping *some* premium/video
-  formats; **bestaudio, subtitles, and metadata all come through**, which is all harvest needs.
-  harvest already sets `quiet`/`no_warnings`, so these warnings never reach users.
-- ffmpeg is **not** involved: `find_ffmpeg()` locates the winget binary and harvest passes
+  formats; **bestaudio, subtitles, and metadata all come through**, which is all blisolver needs.
+  blisolver already sets `quiet`/`no_warnings`, so these warnings never reach users.
+- ffmpeg is **not** involved: `find_ffmpeg()` locates the winget binary and blisolver passes
   `ffmpeg_location`; faster-whisper decodes webm via bundled PyAV. The "ffmpeg not found" report
-  came from a standalone yt-dlp call, not harvest.
+  came from a standalone yt-dlp call, not blisolver.
 
 ## Goals
 
@@ -76,7 +76,7 @@ subtitle paths both flow through it). After the call, if the response looks degr
   and the remediation (install deno; whether `settings.js_runtime` was detected), plus the
   observed title so the symptom is legible.
 
-This guarantees harvest never writes a bundle built from a degraded response.
+This guarantees blisolver never writes a bundle built from a degraded response.
 
 ### 4. Tests
 
@@ -92,7 +92,7 @@ This guarantees harvest never writes a bundle built from a degraded response.
 Add `deno` to dependencies with an accurate note: it provides the JS runtime yt-dlp needs to use
 YouTube's real web player client (reliable metadata + subtitles). Install via
 `irm https://deno.land/install.ps1 | iex` (winget also works where available). Note that the
-`nsig` challenge solver (EJS) is a separate optional component harvest does not require.
+`nsig` challenge solver (EJS) is a separate optional component blisolver does not require.
 
 ## Rollout
 

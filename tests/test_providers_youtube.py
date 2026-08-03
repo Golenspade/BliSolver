@@ -2,9 +2,9 @@ import io
 import json
 from pathlib import Path
 
-from harvest.config import Settings
-from harvest.providers.base import Canonical, SourceMetadata
-from harvest.providers.youtube import YouTubeProvider
+from blisolver.config import Settings
+from blisolver.providers.base import Canonical, SourceMetadata
+from blisolver.providers.youtube import YouTubeProvider
 
 FIX = Path(__file__).parent / "fixtures" / "youtube"
 
@@ -46,7 +46,7 @@ def test_auth_opts_omits_browser_cookies_by_default():
 
 
 def test_auth_opts_attaches_browser_cookies_when_opted_in():
-    # Gated content is still reachable via the explicit opt-in (HARVEST_YT_COOKIES).
+    # Gated content is still reachable via the explicit opt-in (BLISOLVER_YT_COOKIES).
     p = YouTubeProvider()
     opts = p.auth_opts(Settings(youtube_cookies=True))
     assert "cookiesfrombrowser" in opts
@@ -238,7 +238,7 @@ import types  # noqa: E402
 
 import pytest  # noqa: E402
 
-import harvest.providers.youtube as youtube_mod  # noqa: E402
+import blisolver.providers.youtube as youtube_mod  # noqa: E402
 
 
 def _fake_yt_dlp(monkeypatch, info):

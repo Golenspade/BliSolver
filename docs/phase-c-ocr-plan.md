@@ -22,7 +22,7 @@
 ## 2. 架构：子进程隔离（与 transcribe→whisper-cli 同模式）
 
 ```
-harvest 主进程 (py3.14 venv, 无 paddle/ocr 依赖)
+blisolver 主进程 (py3.14 venv, 无 paddle/ocr 依赖)
         │ subprocess(stdin=JSON req, stdout=JSON resp)
         ▼
 scripts/ocr_worker.py  (跑在 .ocr-venv py3.12，唯一依赖 rapidocr+cv2+numpy)
@@ -35,8 +35,8 @@ scripts/ocr_worker.py  (跑在 .ocr-venv py3.12，唯一依赖 rapidocr+cv2+nump
 - `scripts/ocr_worker.py`（新增，独立 venv 跑）
   - `mode=detect`：每 ~30s 采底栏 N 帧，OCR，测文本持久性 → `{has_hardsubs, confidence, sampled, positive}`
   - `mode=ocr`：按 fps（默认 3）采底栏，OCR 每帧，时序去重相邻相似文本 → `{segments:[{start,end,text,confidence}], frames}`
-- `harvest/detect_hardsubs.py`（新增 shim）：subprocess 调 worker detect，返回 `HardsubResult`
-- `harvest/ocr.py`（新增 shim）：subprocess 调 worker ocr，返回 `list[Segment]`（source="ocr"）
+- `blisolver/detect_hardsubs.py`（新增 shim）：subprocess 调 worker detect，返回 `HardsubResult`
+- `blisolver/ocr.py`（新增 shim）：subprocess 调 worker ocr，返回 `list[Segment]`（source="ocr"）
 - `config.py`：加 OCR 字段（fps、band、detect 间隔、worker 路径、venv python、置信阈值）
 - `cli.py`：加 `--ocr {auto,on,off}`（默认 auto：detect 先行，has_hardsubs 才跑全量 ocr），产物写 `Bundle.ocr`
 - 测试：mock subprocess 验协议；测去重逻辑；测 config 默认值
@@ -51,6 +51,6 @@ scripts/ocr_worker.py  (跑在 .ocr-venv py3.12，唯一依赖 rapidocr+cv2+nump
 
 ## 5. 验收
 
-- 端到端：`harvest ingest <url> --ocr --no-vision --no-frame-images` → `Bundle.ocr` 非空，
+- 端到端：`blisolver ingest <url> --ocr --no-vision --no-frame-images` → `Bundle.ocr` 非空，
   segments 带 source="ocr"、时间戳合理、文本与实测真值对齐。
 - 测试套件全绿。

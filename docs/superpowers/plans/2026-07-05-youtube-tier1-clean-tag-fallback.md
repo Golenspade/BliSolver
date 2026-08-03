@@ -29,7 +29,7 @@ region (2-alpha / 3-digit) subtags. This admits `de-DE`, `zh-Hant`, `es-419`; it
 
 ## Tasks (each TDD: failing test first)
 
-### Task 1 — `_is_clean_bcp47` + `pick_human_key` helpers (`harvest/providers/youtube_autosub.py`)
+### Task 1 — `_is_clean_bcp47` + `pick_human_key` helpers (`blisolver/providers/youtube_autosub.py`)
 
 Add two pure helpers next to `pick_auto_key`/`_lang_base` (reuse `_lang_base`).
 
@@ -43,7 +43,7 @@ Tests (`tests/test_youtube_autosub.py`): exact wins; `de`↔`de-DE`; `en-US`→`
 `es-419` accepted; `en-US-njLgzgtehjs` rejected; `en-eEY6OEpapPo` rejected; no same-base key → None;
 ranking prefers fuller-then-shorter; `_is_clean_bcp47` unit cases.
 
-### Task 2 — Wire Tier 1 to `pick_human_key` (`harvest/providers/youtube.py`)
+### Task 2 — Wire Tier 1 to `pick_human_key` (`blisolver/providers/youtube.py`)
 
 Replace the exact-key block with `key = pick_human_key(subtitles, target)`; on hit, fetch the `vtt`
 (or first) track, `parse_vtt`, return `human-sub` with `language=key` and a reason reflecting

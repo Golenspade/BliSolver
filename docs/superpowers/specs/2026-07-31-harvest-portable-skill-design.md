@@ -6,14 +6,14 @@
 
 ## Goal
 
-Package the current BliSolver/`harvest` capability as a portable Agent Skill that teaches another Agent how to operate the video-ingestion pipeline, diagnose its environment, and consume or validate its Atlas bundles without copying the application source into the skill.
+Package the current BliSolver/`blisolver` capability as a portable Agent Skill that teaches another Agent how to operate the video-ingestion pipeline, diagnose its environment, and consume or validate its Atlas bundles without copying the application source into the skill.
 
 ## Scope and boundary
 
 The published artifact is a self-contained skill directory:
 
 ```text
-harvest-video-ingestion/
+blisolver-video-ingestion/
 ├── SKILL.md
 ├── LICENSE.txt
 ├── references/
@@ -35,13 +35,13 @@ harvest-video-ingestion/
 
 The skill does **not** vendor:
 
-- the `harvest/` Python package;
+- the `blisolver/` Python package;
 - `.venv/`, `.ocr-venv/`, downloaded models, browser profiles, or cookies;
 - `cache/`, `out/`, raw videos, frames, transcripts, or other generated artifacts;
 - `.env` or any secret-bearing configuration;
 - the untracked `scripts/download_video.py` helper.
 
-The skill therefore remains small and portable while honestly documenting its runtime dependency on an installed `harvest` command or a BliSolver checkout.
+The skill therefore remains small and portable while honestly documenting its runtime dependency on an installed `blisolver` command or a BliSolver checkout.
 
 ## Current truth versus historical documents
 
@@ -54,11 +54,11 @@ The skill will state this precedence explicitly:
 
 Important current facts to preserve:
 
-- CLI verbs are `harvest ingest`, `harvest probe`, and `harvest mcp`.
+- CLI verbs are `blisolver ingest`, `blisolver probe`, and `blisolver mcp`.
 - The current bundle schema is `1.1`.
 - `Segment.source`/`Segment.confidence` and `Bundle.ocr` are part of schema 1.1.
 - Supported ingestion platforms are `bilibili.com` and YouTube; `bilibili.tv` remains deferred and must fail loudly rather than be treated as supported.
-- The current transcription implementation shells out to `whisper-cli`/whisper.cpp and parses SRT. Older README/spec text that describes faster-whisper/CUDA is historical wherever it conflicts with `harvest/transcribe.py` and current tests.
+- The current transcription implementation shells out to `whisper-cli`/whisper.cpp and parses SRT. Older README/spec text that describes faster-whisper/CUDA is historical wherever it conflicts with `blisolver/transcribe.py` and current tests.
 - OCR is an optional isolated worker in `scripts/ocr_worker.py` and `.ocr-venv`.
 - Vision uses the LM Studio OpenAI-compatible endpoint and requires the projector nonce check before captioning.
 - Danmaku and command-danmaku interactions are independent optional bilibili tracks.
@@ -72,9 +72,9 @@ The skill triggers when an Agent needs to:
 - configure or diagnose ffmpeg, JavaScript runtime, whisper-cli, LM Studio, OCR, or provider authentication;
 - inspect a produced `bundle.json`/`bundle.md` pair;
 - validate schema, artifact paths, provenance, and optional tracks;
-- understand the boundary between harvest acquisition and Atlas downstream interpretation.
+- understand the boundary between blisolver acquisition and Atlas downstream interpretation.
 
-It must not encourage harvest to summarize, extract entities, or treat danmaku/engagement as authoritative video facts; those are downstream or lower-authority signals.
+It must not encourage blisolver to summarize, extract entities, or treat danmaku/engagement as authoritative video facts; those are downstream or lower-authority signals.
 
 ## Script interfaces
 
@@ -86,7 +86,7 @@ All scripts are non-interactive and use argument lists rather than shell interpo
 python scripts/doctor.py [--project-root PATH] [--json]
 ```
 
-Reports a machine-readable check list without probing remote services or printing secret values. Checks include Python version, harvest import/CLI availability, ffmpeg, deno/node, whisper-cli, vision configuration, optional OCR isolate, and provider-auth configuration. Missing optional stage dependencies are warnings; missing core runtime pieces are errors.
+Reports a machine-readable check list without probing remote services or printing secret values. Checks include Python version, blisolver import/CLI availability, ffmpeg, deno/node, whisper-cli, vision configuration, optional OCR isolate, and provider-auth configuration. Missing optional stage dependencies are warnings; missing core runtime pieces are errors.
 
 ### `probe.py`
 
@@ -94,12 +94,12 @@ Reports a machine-readable check list without probing remote services or printin
 python scripts/probe.py URL [--project-root PATH]
 ```
 
-Delegates to `harvest probe URL`, verifies that successful stdout is a single JSON object, preserves diagnostics on stderr, and returns the child exit code. It is safe to pipe stdout to a JSON parser.
+Delegates to `blisolver probe URL`, verifies that successful stdout is a single JSON object, preserves diagnostics on stderr, and returns the child exit code. It is safe to pipe stdout to a JSON parser.
 
 ### `ingest.py`
 
 ```text
-python scripts/ingest.py URL [harvest-ingest-flags] [--project-root PATH] [--dry-run]
+python scripts/ingest.py URL [blisolver-ingest-flags] [--project-root PATH] [--dry-run]
 ```
 
 Exposes the current ingest flags (`--part`, `--all-parts`, `--force-whisper`, `--lang`, `--robust`, `--no-vision`, `--dedup-threshold`, `--out`, `--no-frame-images`, `--danmaku`, `--interactions`, `--ocr`, and `--force-ocr`). It delegates to the real CLI, preserves long-running progress output, and supports `--dry-run` for safe command inspection.
@@ -118,18 +118,18 @@ Reads only local files and emits a compact summary: identity, schema, transcript
 python scripts/validate_bundle.py BUNDLE_OR_DIRECTORY [--project-root PATH]
 ```
 
-Reads `bundle.json` and `bundle.md`, validates the JSON with the current `harvest.schema.Bundle` model, enforces schema 1.1, rejects frame path traversal, and reports missing referenced frame images. It emits a JSON result and exits 0 for valid bundles, 1 for invalid bundles, and 2 for usage/runtime failures.
+Reads `bundle.json` and `bundle.md`, validates the JSON with the current `blisolver.schema.Bundle` model, enforces schema 1.1, rejects frame path traversal, and reports missing referenced frame images. It emits a JSON result and exits 0 for valid bundles, 1 for invalid bundles, and 2 for usage/runtime failures.
 
 ## Runtime discovery
 
 `_common.py` will resolve the runtime in this order:
 
 1. explicit `--project-root`;
-2. `HARVEST_PROJECT_ROOT`;
-3. the current directory or an ancestor containing both `harvest/` and `pyproject.toml`;
-4. an installed `harvest` executable on `PATH`.
+2. `BLISOLVER_PROJECT_ROOT`;
+3. the current directory or an ancestor containing both `blisolver/` and `pyproject.toml`;
+4. an installed `blisolver` executable on `PATH`.
 
-For a source checkout, wrappers invoke `[sys.executable, "-m", "harvest.cli", ...]` with the checkout as cwd and on `PYTHONPATH`. For an installed deployment, they invoke the `harvest` executable. No wrapper assumes the skill itself is inside the BliSolver repository.
+For a source checkout, wrappers invoke `[sys.executable, "-m", "blisolver.cli", ...]` with the checkout as cwd and on `PYTHONPATH`. For an installed deployment, they invoke the `blisolver` executable. No wrapper assumes the skill itself is inside the BliSolver repository.
 
 ## Security and reliability rules
 
@@ -153,7 +153,7 @@ For a source checkout, wrappers invoke `[sys.executable, "-m", "harvest.cli", ..
 | Select a provider or debug subtitles/auth | `references/provider-guide.md` |
 | Understand transcript, frames, vision, OCR, fusion, danmaku, and interactions | `references/pipeline-stages.md` |
 | Run setup, preflight, recovery, and validation safely | `references/operational-runbook.md` |
-| Clarify Atlas/harvest terminology and authority | `references/domain-glossary.md` |
+| Clarify Atlas/blisolver terminology and authority | `references/domain-glossary.md` |
 | Locate current facts in source files and tests | `references/source-map.md` |
 
 References are directly linked from `SKILL.md`; they do not depend on a deep chain of references.
@@ -162,7 +162,7 @@ References are directly linked from `SKILL.md`; they do not depend on a deep cha
 
 The finished artifact must satisfy all of the following:
 
-1. `SKILL.md` has valid frontmatter with `name: harvest-video-ingestion` and a trigger-oriented `description`.
+1. `SKILL.md` has valid frontmatter with `name: blisolver-video-ingestion` and a trigger-oriented `description`.
 2. The package passes `skills-ref validate` when that validator is installed.
 3. Every referenced file exists and all links are relative to the skill root.
 4. Each script supports `--help`; local-only scripts work without network access.

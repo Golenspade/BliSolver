@@ -1,7 +1,7 @@
 """Phase C: hard-subtitle OCR stage — subprocess-shim contract + caching + provenance coverage.
 
 The OCR engine itself lives in the isolated worker (scripts/ocr_worker.py, run in .ocr-venv) and
-is exercised end-to-end on a real burned-in-sub video separately. These tests pin the HARVEST-side
+is exercised end-to-end on a real burned-in-sub video separately. These tests pin the BLISOLVER-side
 contract: the one-line-JSON protocol, Segment provenance (source="ocr"/confidence), per-part +
 per-knob caching, and graceful no-op when the OCR isolate is absent (so a missing .ocr-venv never
 crashes ingest or pollutes cache).
@@ -9,9 +9,9 @@ crashes ingest or pollutes cache).
 import json
 from pathlib import Path
 
-from harvest.config import Settings
-from harvest.providers.base import Canonical
-from harvest.schema import Segment
+from blisolver.config import Settings
+from blisolver.providers.base import Canonical
+from blisolver.schema import Segment
 
 
 def _settings(tmp_path, *, with_isolate=True):
@@ -47,14 +47,14 @@ def _patch_run(monkeypatch, captures, stdout):
         captures["cmd"] = cmd
         captures["request"] = json.loads(input) if input else None
         return _ProcResult(stdout)
-    monkeypatch.setattr("harvest.ocr.subprocess.run", fake_run)
-    monkeypatch.setattr("harvest.detect_hardsubs.subprocess.run", fake_run)
+    monkeypatch.setattr("blisolver.ocr.subprocess.run", fake_run)
+    monkeypatch.setattr("blisolver.detect_hardsubs.subprocess.run", fake_run)
 
 
 # --- detect_hardsubs shim -----------------------------------------------------------
 
 def test_detect_hardsubs_parses_worker_response_and_caches(monkeypatch, tmp_path):
-    from harvest.detect_hardsubs import detect_hardsubs
+    from blisolver.detect_hardsubs import detect_hardsubs
 
     s = _settings(tmp_path)
     cap = {}
@@ -79,7 +79,7 @@ def test_detect_hardsubs_parses_worker_response_and_caches(monkeypatch, tmp_path
 
 
 def test_detect_hardsubs_returns_absent_and_does_not_cache_on_isolate_missing(tmp_path):
-    from harvest.detect_hardsubs import detect_hardsubs
+    from blisolver.detect_hardsubs import detect_hardsubs
 
     s = _settings(tmp_path, with_isolate=False)
     result = detect_hardsubs(_canon(), Path("/video.mp4"), s)
@@ -92,7 +92,7 @@ def test_detect_hardsubs_returns_absent_and_does_not_cache_on_isolate_missing(tm
 
 
 def test_detect_hardsubs_negative_verdict_is_cached(tmp_path, monkeypatch):
-    from harvest.detect_hardsubs import detect_hardsubs
+    from blisolver.detect_hardsubs import detect_hardsubs
 
     s = _settings(tmp_path)
     cap = {}
@@ -110,7 +110,7 @@ def test_detect_hardsubs_negative_verdict_is_cached(tmp_path, monkeypatch):
 # --- ocr shim -----------------------------------------------------------------------
 
 def test_ocr_subtitle_returns_segments_with_provenance_and_caches(monkeypatch, tmp_path):
-    from harvest.ocr import ocr_subtitle
+    from blisolver.ocr import ocr_subtitle
 
     s = _settings(tmp_path)
     cap = {}
@@ -143,7 +143,7 @@ def test_ocr_subtitle_returns_segments_with_provenance_and_caches(monkeypatch, t
 
 
 def test_ocr_subtitle_isolate_absent_is_noop_and_does_not_cache(tmp_path):
-    from harvest.ocr import ocr_subtitle
+    from blisolver.ocr import ocr_subtitle
 
     s = _settings(tmp_path, with_isolate=False)
     assert ocr_subtitle(_canon(), Path("/v.mp4"), s) == []
@@ -152,7 +152,7 @@ def test_ocr_subtitle_isolate_absent_is_noop_and_does_not_cache(tmp_path):
 
 
 def test_ocr_subtitle_worker_failure_returns_empty_and_does_not_cache(monkeypatch, tmp_path):
-    from harvest.ocr import ocr_subtitle
+    from blisolver.ocr import ocr_subtitle
 
     s = _settings(tmp_path)
     cap = {}
@@ -181,8 +181,8 @@ def test_render_markdown_emits_ocr_section_when_track_present():
     # bundle.md is the primary ingest surface; the OCR track must surface there under a distinct
     # heading with per-cue confidence + start time, so downstream readers can see hard-subs without
     # parsing bundle.json. Picked transcript (none here) and frames co-exist unaffected.
-    from harvest.merge import render_markdown
-    from harvest.schema import Bundle, Meta, Transcript
+    from blisolver.merge import render_markdown
+    from blisolver.schema import Bundle, Meta, Transcript
 
     bundle = Bundle(
         platform="bilibili.com", id="BV1", part=1, url="u",
@@ -203,8 +203,8 @@ def test_render_markdown_emits_ocr_section_when_track_present():
 
 
 def test_render_markdown_omits_ocr_section_when_track_absent():
-    from harvest.merge import render_markdown
-    from harvest.schema import Bundle, Meta, Transcript
+    from blisolver.merge import render_markdown
+    from blisolver.schema import Bundle, Meta, Transcript
 
     bundle = Bundle(
         platform="bilibili.com", id="BV1", part=1, url="u",

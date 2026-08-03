@@ -1,4 +1,4 @@
-# harvest — Danmaku `high_like` Enrichment (protobuf census switch)
+# blisolver — Danmaku `high_like` Enrichment (protobuf census switch)
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (or
 > superpowers:executing-plans) to implement this plan task-by-task, each task strictly following
@@ -11,7 +11,7 @@ server-**sampled XML endpoint** to the **protobuf census** (`x/v2/dm/web/seg.so`
 per-danmaku `attr` flag the XML lacks. This also yields a ~90–94%-complete census (vs the old
 sample) as a free by-product.
 
-**Builds on:** [2026-07-02-harvest-danmaku-metadata.md](2026-07-02-harvest-danmaku-metadata.md)
+**Builds on:** [2026-07-02-blisolver-danmaku-metadata.md](2026-07-02-blisolver-danmaku-metadata.md)
 (the shipped danmaku track). This is an **additive** enrichment to that `1.0` contract, with **one
 subtractive change** (removing `sampled`, justified below).
 
@@ -24,10 +24,10 @@ under TDD.
 
 ## What the spike proved (the base this design stands on)
 
-Run against the 6 captured BV ids with harvest's existing cookies:
+Run against the 6 captured BV ids with blisolver's existing cookies:
 
 - ✅ **The plain web census `x/v2/dm/web/seg.so` works with the existing cookie opener — no WBI
-  signing** (the SPEC §3 surface harvest deliberately avoids). Segment-paginated (`segment_index`
+  signing** (the SPEC §3 surface blisolver deliberately avoids). Segment-paginated (`segment_index`
   1..N, 6-min segments); pagination terminates when a further segment yields no danmaku (observed as
   HTTP 304 / empty body past the video's end).
 - ✅ **`DanmakuElem.attr` is populated and bit2 = `DMAttrHighLike` (高赞) fires on genuinely promoted
@@ -36,7 +36,7 @@ Run against the 6 captured BV ids with harvest's existing cookies:
 - ✅ **The census is ~90–94% of `source_total`** (e.g. 3747/3977). The gap is deleted/shielded
   danmaku, not sampling — materially more complete than the XML sample.
 - ✅ **Dependency-free protobuf decode** (stdlib varint reader, ~40 lines) is sufficient — no
-  protobuf library needed, consistent with harvest's stdlib-only fetch layer.
+  protobuf library needed, consistent with blisolver's stdlib-only fetch layer.
 
 **Deliberately dropped after the spike disproved their value (see Decisions):** raw like *counts*
 (`thumbup/stats` endpoint), `color`, `position`, and `weight`.
@@ -121,7 +121,7 @@ Run against the 6 captured BV ids with harvest's existing cookies:
 
 ---
 
-## Concrete schema delta (`harvest/schema.py`)
+## Concrete schema delta (`blisolver/schema.py`)
 
 ```python
 class DanmakuLine(BaseModel):
@@ -181,11 +181,11 @@ class Danmaku(BaseModel):
 ## Tasks
 
 Each task ends with an independently testable deliverable, is TDD (failing test first), and is
-committed on completion. Files touched are all under `harvest/`.
+committed on completion. Files touched are all under `blisolver/`.
 
 ### Task 1 — Census acquisition replaces XML + `sampled` removal (fetch seam)
-**Files:** modify `harvest/player_api.py`, `harvest/schema.py`, `harvest/danmaku.py`; add
-`harvest/danmaku_proto.py` (decoder); modify `tests/test_player_api.py`; add fixture
+**Files:** modify `blisolver/player_api.py`, `blisolver/schema.py`, `blisolver/danmaku.py`; add
+`blisolver/danmaku_proto.py` (decoder); modify `tests/test_player_api.py`; add fixture
 `tests/fixtures/bilibili/seg_sample.bin`.
 **Produces (signatures later tasks rely on):**
 - `RawDanmaku(content_ts: float, text: str, high_like: bool)` — `high_like` new; color/mode NOT kept.
@@ -220,7 +220,7 @@ committed on completion. Files touched are all under `harvest/`.
       termination condition doesn't truncate early (segments fetched ≈ `ceil(duration/360s)`).
 
 ### Task 2 — high_like extraction + chronological interleave (representation stage)
-**Files:** modify `harvest/schema.py`, `harvest/danmaku.py`; modify `tests/test_danmaku.py`.
+**Files:** modify `blisolver/schema.py`, `blisolver/danmaku.py`; modify `tests/test_danmaku.py`.
 **Consumes:** `RawDanmaku.high_like` (Task 1). **Produces:** `DanmakuLine.high_like: bool = False`
 (new schema field), populated; `_fingerprint` folds `high_like`. LLM input/output contract
 (`[{text,count}]`) UNCHANGED.
@@ -241,7 +241,7 @@ committed on completion. Files touched are all under `harvest/`.
       different keys). Commit.
 
 ### Task 3 — Render (👍 + two-cap) + docs
-**Files:** modify `harvest/merge.py`, `PROTOCOL.md`, `SPEC.md`; modify `tests/test_merge.py` (or the
+**Files:** modify `blisolver/merge.py`, `PROTOCOL.md`, `SPEC.md`; modify `tests/test_merge.py` (or the
 existing bundle round-trip test). **Consumes:** `DanmakuLine.high_like` (Task 2).
 
 - [ ] `merge.py`: render `- 👍 「text」` for `high_like` lines (👍 = U+1F44D); implement the

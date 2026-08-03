@@ -13,7 +13,7 @@
 - **Additive / contract-preserving:** `transcript.source` gains no new value — `"auto-sub"` already exists (bilibili path). Authority order documented in PROTOCOL.md/SPEC.md §8 is unchanged: `human-sub > whisper > auto-sub`.
 - **No new dependencies.** No `langdetect`/`cld3` — language-ID checking is a documented non-goal.
 - **Default posture is auto-by-default.** YouTube prefers the auto-caption over Whisper for cost; `--force-whisper` is the only override (it already short-circuits before `fetch_subtitle` in `cli.decide_transcript`, so no change is needed there).
-- **The CJK `harvest/quality.py` gate is bilibili-only and MUST NOT be touched or imported by the YouTube path.** The YouTube net is separate and structural.
+- **The CJK `blisolver/quality.py` gate is bilibili-only and MUST NOT be touched or imported by the YouTube path.** The YouTube net is separate and structural.
 - **Acquisition format is `srt`** (YouTube's server-side de-rolled track), never `vtt`/`json3` (rolling, `<c>`-tagged, ~2× cue inflation). Human captions keep using `vtt`.
 - **Fail toward Whisper on the structural axis:** absent track, wrong/ambiguous `-orig` set, truncated coverage, or empty-but-covered → Whisper.
 - Thresholds live in config as calibratable defaults (like `QualityThresholds`), not literals in code.
@@ -24,7 +24,7 @@
 ### Task 1: `AutoSubNet` config thresholds
 
 **Files:**
-- Modify: `harvest/config.py` (add a dataclass next to `QualityThresholds`, and a `Settings` field)
+- Modify: `blisolver/config.py` (add a dataclass next to `QualityThresholds`, and a `Settings` field)
 - Test: `tests/test_config.py`
 
 **Interfaces:**
@@ -35,7 +35,7 @@
 Add to `tests/test_config.py`:
 
 ```python
-from harvest.config import AutoSubNet, Settings
+from blisolver.config import AutoSubNet, Settings
 
 
 def test_settings_has_youtube_auto_net_defaults():
@@ -59,7 +59,7 @@ Expected: FAIL with `ImportError: cannot import name 'AutoSubNet'`
 
 - [ ] **Step 3: Write minimal implementation**
 
-In `harvest/config.py`, add this dataclass immediately after the `QualityThresholds` class:
+In `blisolver/config.py`, add this dataclass immediately after the `QualityThresholds` class:
 
 ```python
 @dataclass
@@ -89,7 +89,7 @@ Expected: PASS (both new tests, and all existing config tests)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add harvest/config.py tests/test_config.py
+git add blisolver/config.py tests/test_config.py
 git commit -m "feat(config): add AutoSubNet thresholds for YouTube auto-caption net"
 ```
 
@@ -98,11 +98,11 @@ git commit -m "feat(config): add AutoSubNet thresholds for YouTube auto-caption 
 ### Task 2: `youtube_autosub.py` pure helpers
 
 **Files:**
-- Create: `harvest/providers/youtube_autosub.py`
+- Create: `blisolver/providers/youtube_autosub.py`
 - Test: `tests/test_youtube_autosub.py`
 
 **Interfaces:**
-- Consumes: `harvest.subtitles.parse_srt` (existing: `parse_srt(text: str) -> list[Segment]`), `harvest.schema.Segment`, `harvest.config.AutoSubNet` (Task 1).
+- Consumes: `blisolver.subtitles.parse_srt` (existing: `parse_srt(text: str) -> list[Segment]`), `blisolver.schema.Segment`, `blisolver.config.AutoSubNet` (Task 1).
 - Produces:
   - `pick_auto_key(automatic_captions: dict, target: str | None) -> str | None` — the caption dict key to use, or None (→ Whisper).
   - `clean_srt_segments(raw: str) -> list[Segment]` — `parse_srt` + strip leading `>>` speaker markers, drop segments that become empty.
@@ -113,8 +113,8 @@ git commit -m "feat(config): add AutoSubNet thresholds for YouTube auto-caption 
 Create `tests/test_youtube_autosub.py`:
 
 ```python
-from harvest.config import AutoSubNet
-from harvest.providers.youtube_autosub import (
+from blisolver.config import AutoSubNet
+from blisolver.providers.youtube_autosub import (
     clean_srt_segments,
     pick_auto_key,
     structural_net,
@@ -158,17 +158,17 @@ def test_pick_auto_key_empty_dict_returns_none():
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `python -m pytest tests/test_youtube_autosub.py -v`
-Expected: FAIL with `ModuleNotFoundError: No module named 'harvest.providers.youtube_autosub'`
+Expected: FAIL with `ModuleNotFoundError: No module named 'blisolver.providers.youtube_autosub'`
 
 - [ ] **Step 3: Implement `pick_auto_key`**
 
-Create `harvest/providers/youtube_autosub.py`:
+Create `blisolver/providers/youtube_autosub.py`:
 
 ```python
 """YouTube auto-caption acquisition + structural validity net (SPEC §6).
 
 Pure helpers, provider-orchestrated. The net is LANGUAGE-AGNOSTIC and structural (presence,
-coverage, chars-per-second) — deliberately NOT the CJK `harvest/quality.py` gate, which can't be
+coverage, chars-per-second) — deliberately NOT the CJK `blisolver/quality.py` gate, which can't be
 calibrated across YouTube's ~150 language variants. Fail-toward-Whisper on any check.
 """
 
@@ -232,7 +232,7 @@ Expected: FAIL with `ImportError` / `cannot import name 'clean_srt_segments'`
 
 - [ ] **Step 7: Implement `clean_srt_segments`**
 
-Append to `harvest/providers/youtube_autosub.py`:
+Append to `blisolver/providers/youtube_autosub.py`:
 
 ```python
 def clean_srt_segments(raw: str) -> list[Segment]:
@@ -301,7 +301,7 @@ Expected: FAIL with `cannot import name 'structural_net'`
 
 - [ ] **Step 11: Implement `structural_net`**
 
-Append to `harvest/providers/youtube_autosub.py`:
+Append to `blisolver/providers/youtube_autosub.py`:
 
 ```python
 def structural_net(
@@ -338,7 +338,7 @@ Expected: PASS (all 15 tests)
 - [ ] **Step 13: Commit**
 
 ```bash
-git add harvest/providers/youtube_autosub.py tests/test_youtube_autosub.py
+git add blisolver/providers/youtube_autosub.py tests/test_youtube_autosub.py
 git commit -m "feat(youtube): auto-caption key-pick, SRT cleaning, structural net helpers"
 ```
 
@@ -347,11 +347,11 @@ git commit -m "feat(youtube): auto-caption key-pick, SRT cleaning, structural ne
 ### Task 3: Wire `fetch_subtitle` three-tier decision
 
 **Files:**
-- Modify: `harvest/providers/youtube.py:124-145` (the `fetch_subtitle` method)
+- Modify: `blisolver/providers/youtube.py:124-145` (the `fetch_subtitle` method)
 - Test: `tests/test_providers_youtube.py`
 
 **Interfaces:**
-- Consumes: `pick_auto_key`, `clean_srt_segments`, `structural_net` from `harvest.providers.youtube_autosub` (Task 2); `settings.youtube_auto` (Task 1); `SubtitleOutcome` (existing, `harvest/providers/base.py`); `meta.duration_s` (existing on `SourceMetadata`).
+- Consumes: `pick_auto_key`, `clean_srt_segments`, `structural_net` from `blisolver.providers.youtube_autosub` (Task 2); `settings.youtube_auto` (Task 1); `SubtitleOutcome` (existing, `blisolver/providers/base.py`); `meta.duration_s` (existing on `SourceMetadata`).
 - Produces: `fetch_subtitle(...)` now returns, in order: an accepted `human-sub` `SubtitleOutcome`; else an accepted `auto-sub` `SubtitleOutcome`; else a **rejected** `SubtitleOutcome(accepted=False, source_reason="auto-sub rejected (…)")` when an auto track existed but failed the net; else `None` (no usable track). Rejected and `None` both route to Whisper in `cli.decide_transcript`.
 
 - [ ] **Step 1: Update the stale "never consults" test and add auto-path tests**
@@ -437,7 +437,7 @@ Expected: FAIL — the current `fetch_subtitle` returns `None` for the no-human 
 
 - [ ] **Step 3: Rewrite `fetch_subtitle` to the three-tier decision**
 
-In `harvest/providers/youtube.py`, add the import near the top (with the other `from ..` imports):
+In `blisolver/providers/youtube.py`, add the import near the top (with the other `from ..` imports):
 
 ```python
 from .youtube_autosub import clean_srt_segments, pick_auto_key, structural_net
@@ -492,7 +492,7 @@ Replace the entire `fetch_subtitle` method (currently lines ~124-145) with:
         )
 ```
 
-Also update the module docstring at the top of `harvest/providers/youtube.py` (lines 1-5) to match the new behavior:
+Also update the module docstring at the top of `blisolver/providers/youtube.py` (lines 1-5) to match the new behavior:
 
 ```python
 """YouTubeProvider (SPEC §6): native yt-dlp metadata + tiered caption reuse.
@@ -500,7 +500,7 @@ Also update the module docstring at the top of `harvest/providers/youtube.py` (l
 Transcript tier order: human-sub > auto-sub > whisper. target_lang = pinned --lang, else
 info["language"], else None. Human `subtitles[target]` on an exact key -> human-sub. Else the
 original-audio auto-caption (key `target-orig`/`target`, or the sole `*-orig` when target is unknown),
-fetched as de-rolled SRT and accepted only if it clears the structural net (harvest/providers/
+fetched as de-rolled SRT and accepted only if it clears the structural net (blisolver/providers/
 youtube_autosub.py). Anything else -> Whisper. --force-whisper (handled in cli) skips all of this."""
 ```
 
@@ -520,7 +520,7 @@ Expected: PASS (all non-live tests)
 - [ ] **Step 6: Commit**
 
 ```bash
-git add harvest/providers/youtube.py tests/test_providers_youtube.py
+git add blisolver/providers/youtube.py tests/test_providers_youtube.py
 git commit -m "feat(youtube): reuse original-language auto-captions with structural net"
 ```
 
@@ -593,4 +593,4 @@ git commit -m "test(youtube): opt-in live smoke test for auto-caption reuse"
 
 **Placeholder scan:** No TBD/TODO/"handle edge cases"/"similar to Task N". Every code step shows complete code; every run step shows an exact command + expected result.
 
-**Type consistency:** `pick_auto_key`/`clean_srt_segments`/`structural_net` signatures are identical between Task 2 (definition) and Task 3 (call site). `AutoSubNet` field names (`min_cues`, `coverage_min`, `coverage_max`, `cps_min`) are identical across Tasks 1, 2, 3. `SubtitleOutcome` construction matches the existing dataclass in `harvest/providers/base.py` (`accepted`, `source`, `source_reason`, `language`, `segments`, `quality_gate`). `meta.duration_s` matches `SourceMetadata`.
+**Type consistency:** `pick_auto_key`/`clean_srt_segments`/`structural_net` signatures are identical between Task 2 (definition) and Task 3 (call site). `AutoSubNet` field names (`min_cues`, `coverage_min`, `coverage_max`, `cps_min`) are identical across Tasks 1, 2, 3. `SubtitleOutcome` construction matches the existing dataclass in `blisolver/providers/base.py` (`accepted`, `source`, `source_reason`, `language`, `segments`, `quality_gate`). `meta.duration_s` matches `SourceMetadata`.

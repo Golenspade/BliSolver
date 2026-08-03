@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from harvest.config import Settings
-from harvest.mcp import server as mcp_server
-from harvest.mcp.server import (
+from blisolver.config import Settings
+from blisolver.mcp import server as mcp_server
+from blisolver.mcp.server import (
     JobRecord,
     _MODE_FLAGS,
     get_timeline_payload,
@@ -106,7 +106,7 @@ def _make_rec(tmp_path, *, pid=None, bundle_exists=False, bundle_path=None):
         pid=pid, started_at=time.time(), bundle_path=bp,
         log_path=str(settings.cache_dir / "mcp-jobs" / "abc123.log"),
     )
-    from harvest.mcp.server import _save_job
+    from blisolver.mcp.server import _save_job
     _save_job(settings, rec)
     if bundle_exists:
         Path(bp).parent.mkdir(parents=True, exist_ok=True)
@@ -117,7 +117,7 @@ def _make_rec(tmp_path, *, pid=None, bundle_exists=False, bundle_path=None):
 def test_job_status_running_when_pid_alive(monkeypatch, tmp_path):
     settings, rec = _make_rec(tmp_path, pid=99999, bundle_exists=False)
     # pid 99999 is almost certainly dead on the test host; force "alive" via the probe.
-    monkeypatch.setattr("harvest.mcp.server._pid_alive", lambda pid: True)
+    monkeypatch.setattr("blisolver.mcp.server._pid_alive", lambda pid: True)
     assert job_status(settings, rec).status == "running"
 
 
@@ -145,7 +145,7 @@ def test_load_job_returns_none_for_unknown(tmp_path):
 # --- start_ingest_job (subprocess spawn contract) ------------------------------------
 
 def test_start_ingest_job_spawns_ingest_with_mode_flags(monkeypatch, tmp_path):
-    """The spawned command must be `python -m harvest.cli ingest <url> --no-vision
+    """The spawned command must be `python -m blisolver.cli ingest <url> --no-vision
     --no-frame-images [+mode flags]`, inherit env, and write a job record immediately."""
     settings = _settings(tmp_path)
     captured = {}
@@ -156,12 +156,12 @@ def test_start_ingest_job_spawns_ingest_with_mode_flags(monkeypatch, tmp_path):
     def fake_popen(cmd, **kwargs):
         captured["cmd"] = cmd
         captured["cwd"] = kwargs.get("cwd")
-        captured["env_set"] = "HARVEST_COOKIES_BROWSER" in (kwargs.get("env") or {})
+        captured["env_set"] = "BLISOLVER_COOKIES_BROWSER" in (kwargs.get("env") or {})
         # Popen opens the log file; the fake proc just needs to exist.
         return _FakeProc()
 
-    monkeypatch.setattr("harvest.mcp.server.subprocess.Popen", fake_popen)
-    monkeypatch.setenv("HARVEST_COOKIES_BROWSER", "chrome")  # env the MCP server would carry
+    monkeypatch.setattr("blisolver.mcp.server.subprocess.Popen", fake_popen)
+    monkeypatch.setenv("BLISOLVER_COOKIES_BROWSER", "chrome")  # env the MCP server would carry
     # Avoid opening a real log file handle leak: redirect to a path under tmp.
     monkeypatch.setattr("builtins.open", lambda f, *a, **k: _NullFile())
 
@@ -171,7 +171,7 @@ def test_start_ingest_job_spawns_ingest_with_mode_flags(monkeypatch, tmp_path):
     assert rec.canonical_id == "BV1dSKJ6wEVz"
     assert rec.part == 1
     cmd = captured["cmd"]
-    assert cmd[1] == "-m" and cmd[2] == "harvest.cli"
+    assert cmd[1] == "-m" and cmd[2] == "blisolver.cli"
     assert "ingest" in cmd and "https://www.bilibili.com/video/BV1dSKJ6wEVz/" in cmd
     assert "--no-vision" in cmd and "--no-frame-images" in cmd
     assert "--ocr" in cmd and "--force-ocr" in cmd  # force_ocr mode flags

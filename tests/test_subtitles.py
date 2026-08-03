@@ -1,7 +1,7 @@
-from harvest.config import REFERER, Settings
-from harvest.resolve import Canonical
-from harvest.schema import Segment
-from harvest.subtitles import SubtitleResult, is_part1_duplicate, probe, ydl_opts
+from blisolver.config import REFERER, Settings
+from blisolver.resolve import Canonical
+from blisolver.schema import Segment
+from blisolver.subtitles import SubtitleResult, is_part1_duplicate, probe, ydl_opts
 
 
 def _segs(texts):
@@ -101,7 +101,7 @@ def test_probe_accepts_part_gt1_when_text_differs_from_part1():
 
 
 def test_parse_vtt_basic_cues():
-    from harvest.subtitles import parse_vtt
+    from blisolver.subtitles import parse_vtt
     vtt = (
         "WEBVTT\n\n"
         "00:00:00.000 --> 00:00:02.500\nHello world\n\n"
@@ -114,7 +114,7 @@ def test_parse_vtt_basic_cues():
 
 
 def test_parse_vtt_ignores_header_notes_and_cue_ids():
-    from harvest.subtitles import parse_vtt
+    from blisolver.subtitles import parse_vtt
     vtt = (
         "WEBVTT - Kind: captions\n\n"
         "NOTE this is a comment\n\n"

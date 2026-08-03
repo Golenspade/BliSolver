@@ -1,6 +1,6 @@
-from harvest.config import AutoSubNet
-from harvest.schema import Segment
-from harvest.providers.youtube_autosub import (
+from blisolver.config import AutoSubNet
+from blisolver.schema import Segment
+from blisolver.providers.youtube_autosub import (
     _is_clean_bcp47,
     clean_srt_segments,
     pick_auto_key,

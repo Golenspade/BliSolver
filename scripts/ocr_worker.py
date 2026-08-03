@@ -1,6 +1,6 @@
-"""Hard-subtitle OCR worker — runs in an ISOLATED venv (``.ocr-venv``) separate from harvest's
+"""Hard-subtitle OCR worker — runs in an ISOLATED venv (``.ocr-venv``) separate from blisolver's
 main Python so the OCR runtime (rapidocr-onnxruntime / onnxruntime / opencv) never pollutes
-harvest's dependency graph. The harvest side never imports OCR libs; it shells out to this script
+blisolver's dependency graph. The blisolver side never imports OCR libs; it shells out to this script
 over a line-JSON stdin/stdout protocol (same isolation model as ``transcribe.py``→``whisper-cli``).
 
 Protocol:
@@ -13,7 +13,7 @@ Protocol:
       ocr    -> {"ok": true, "segments": [{"start","end","text","confidence"}, ...],
                  "frames": N, "sampled_fps": f}
       error  -> {"ok": false, "error": "..."}
-  * Diagnostics go to stderr (never stdout) so the harvest shim can parse stdout as JSON.
+  * Diagnostics go to stderr (never stdout) so the blisolver shim can parse stdout as JSON.
 
 Engine choice: ``rapidocr_onnxruntime`` reuses PaddleOCR's det+rec models exported to ONNX, so
 the detection/recognition quality is PaddleOCR's, but the runtime is plain onnxruntime (cross-
@@ -297,7 +297,7 @@ def main() -> int:
             resp = ocr_mode(req)
         else:
             resp = {"ok": False, "error": f"unknown mode: {mode!r}"}
-    except Exception as exc:  # propagate to harvest as a structured error, never a traceback
+    except Exception as exc:  # propagate to blisolver as a structured error, never a traceback
         _stderr(f"[worker] uncaught: {exc!r}")
         resp = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
     print(json.dumps(resp, ensure_ascii=False))

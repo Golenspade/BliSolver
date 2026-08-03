@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-SKILL = REPO / "skill" / "harvest-video-ingestion"
+SKILL = REPO / "skill" / "blisolver-video-ingestion"
 SCRIPTS = SKILL / "scripts"
 
 
@@ -91,7 +91,7 @@ def write_bundle(
 
 def test_manifest_lists_valid_skill_files():
     text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
-    assert "name: harvest-video-ingestion" in text
+    assert "name: blisolver-video-ingestion" in text
     assert "references/current-contract.md" in text
     assert "scripts/validate_bundle.py" in text
     for path in [
@@ -150,13 +150,13 @@ def test_ingest_dry_run_forwards_current_flags(tmp_path):
     payload = json.loads(result.stdout)
     assert payload["cwd"] == str(REPO)
     assert payload["command"][-2:] == ["--ocr", "--force-ocr"]
-    assert payload["command"][0:3] == [sys.executable, "-m", "harvest.cli"]
+    assert payload["command"][0:3] == [sys.executable, "-m", "blisolver.cli"]
     assert "--force-whisper" in payload["command"]
     assert "--no-frame-images" in payload["command"]
 
 
 def test_probe_keeps_child_json_on_stdout(tmp_path):
-    fake = tmp_path / "harvest"
+    fake = tmp_path / "blisolver"
     fake.write_text(
         "#!/usr/bin/env python3\n"
         "import json, sys\n"
@@ -167,7 +167,7 @@ def test_probe_keeps_child_json_on_stdout(tmp_path):
     fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
     env = {
         "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}",
-        "HARVEST_PROJECT_ROOT": "",
+        "BLISOLVER_PROJECT_ROOT": "",
     }
     result = run_script(
         "probe.py",
@@ -181,7 +181,7 @@ def test_probe_keeps_child_json_on_stdout(tmp_path):
 
 
 def test_probe_rejects_json_non_object(tmp_path):
-    fake = tmp_path / "harvest"
+    fake = tmp_path / "blisolver"
     fake.write_text(
         "#!/usr/bin/env python3\n"
         "print('[]')\n",
@@ -190,7 +190,7 @@ def test_probe_rejects_json_non_object(tmp_path):
     fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
     env = {
         "PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}",
-        "HARVEST_PROJECT_ROOT": "",
+        "BLISOLVER_PROJECT_ROOT": "",
     }
     result = run_script(
         "probe.py",
@@ -274,14 +274,14 @@ def test_doctor_json_never_contains_secret_values():
 
 def test_doctor_detects_broken_checkout(tmp_path):
     root = tmp_path / "broken-checkout"
-    (root / "harvest").mkdir(parents=True)
-    (root / "harvest" / "__init__.py").write_text("", encoding="utf-8")
+    (root / "blisolver").mkdir(parents=True)
+    (root / "blisolver" / "__init__.py").write_text("", encoding="utf-8")
     (root / "pyproject.toml").write_text("[project]\nname='broken'\n", encoding="utf-8")
     result = run_script("doctor.py", "--project-root", str(root), "--json")
     assert result.returncode == 1
     report = json.loads(result.stdout)
-    harvest = next(check for check in report["checks"] if check["name"] == "harvest")
-    assert harvest["status"] == "error"
+    blisolver = next(check for check in report["checks"] if check["name"] == "blisolver")
+    assert blisolver["status"] == "error"
 
 
 def test_skill_ingest_dry_run_sanitizes_title_prefix():

@@ -4,7 +4,7 @@ a fake opener, and the decode tests synthesize protobuf inline (no network, no c
 
 from __future__ import annotations
 
-from harvest.schema import Bundle, Grade, Interactions, Vote, VoteOption
+from blisolver.schema import Bundle, Grade, Interactions, Vote, VoteOption
 
 
 def test_interactions_types_roundtrip():
@@ -44,11 +44,11 @@ def test_bundle_interactions_defaults_none():
     assert Bundle.model_fields["interactions"].default is None
 
 
-from harvest.interactions import build_interactions, fetch_interactions
-from harvest.interactions_proto import RawCommandDm
-from harvest.config import Settings
-from harvest.resolve import Canonical
-from harvest.player_api import ViewData
+from blisolver.interactions import build_interactions, fetch_interactions
+from blisolver.interactions_proto import RawCommandDm
+from blisolver.config import Settings
+from blisolver.resolve import Canonical
+from blisolver.player_api import ViewData
 
 
 _VOTE_EXTRA = (
@@ -162,7 +162,7 @@ def test_fetch_interactions_no_cid_returns_empty():
 
 
 def test_bilibili_provider_fetch_interactions_passthrough():
-    from harvest.providers.bilibili import BilibiliProvider
+    from blisolver.providers.bilibili import BilibiliProvider
     from tests.test_interactions_proto import _command_dm
 
     canonical = Canonical(platform="bilibili.com", id="BV1x", part=1, url="u")

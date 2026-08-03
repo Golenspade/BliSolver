@@ -1,6 +1,6 @@
-from harvest.config import QualityThresholds
-from harvest.quality import evaluate
-from harvest.schema import Segment
+from blisolver.config import QualityThresholds
+from blisolver.quality import evaluate
+from blisolver.schema import Segment
 
 
 def _segs(texts, step=4.0):
@@ -64,7 +64,7 @@ def test_auto_sub_skips_punct_density_trip_but_still_reports_it():
     # an auto-sub track (verified across Phase F sampling: every good AND bad ai-zh scored
     # 0.0-0.011 at the 0.04 floor, all wrongly rejected). The metric is still REPORTED so the
     # gate stays transparent.
-    from harvest.schema import Segment
+    from blisolver.schema import Segment
     segs = [Segment(start=0, end=1, text="今天看看代码"), Segment(start=1, end=2, text="然后说了什么")]
     # No punctuation -> punct_density=0.0, below the 0.04 floor. human-sub rejects; auto-sub passes.
     human = evaluate(segs, duration_s=10.0, thresholds=QualityThresholds(), source="human-sub")
@@ -78,7 +78,7 @@ def test_auto_sub_bad_quality_still_rejected_without_punct():
     # A BAD ai-zh (looping music symbols) still trips via dup_ratio/nonzh_ratio/cps even with
     # punct_density skipped — so skipping punct for auto-sub never lets bad AI through. Verified
     # on BV17FKJ6iER6 ai-zh (dup 0.88, nonzh 0.46, cps 0.76).
-    from harvest.schema import Segment
+    from blisolver.schema import Segment
     bad = [Segment(start=i*1.0, end=i*1.0+1.0, text="♪ 音乐 ♪") for i in range(10)]
     auto = evaluate(bad, duration_s=100.0, thresholds=QualityThresholds(), source="auto-sub")
     assert auto.passed is False
@@ -86,8 +86,8 @@ def test_auto_sub_bad_quality_still_rejected_without_punct():
 
 
 def test_describe_failure_source_aware():
-    from harvest.quality import describe_failure
-    from harvest.schema import QualityGate
+    from blisolver.quality import describe_failure
+    from blisolver.schema import QualityGate
     g = QualityGate(passed=False, punct_density=0.0, dup_ratio=0.0, nonzh_ratio=0.0, cps=5.0)
     t = QualityThresholds()
     # human-sub: punct_density 0.0 < 0.04 is a reported failure cause.

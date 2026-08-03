@@ -3,16 +3,16 @@ from pathlib import Path
 
 import pytest
 
-from harvest.config import Settings
-from harvest.providers.base import Canonical
-from harvest.subtitles import ydl_opts
+from blisolver.config import Settings
+from blisolver.providers.base import Canonical
+from blisolver.subtitles import ydl_opts
 
 
 def _stub_whisper_cli(monkeypatch, tmp_path, *, lang=None, robust=False):
     """Wire the whisper-cli subprocess shim: skip the ffmpeg downmix, fake whisper-cli writing
     an SRT next to the audio, and capture the argv handed to subprocess.run. Returns the dict
     the captured command lands in."""
-    from harvest import transcribe as T
+    from blisolver import transcribe as T
 
     audio = tmp_path / "x.m4a"
     audio.write_bytes(b"x")
@@ -36,7 +36,7 @@ def _stub_whisper_cli(monkeypatch, tmp_path, *, lang=None, robust=False):
 def test_transcribe_defaults_language_to_none(monkeypatch, tmp_path):
     # whisper-cli shim: default lang=None => NO "-l" flag (auto-detect); robust=False => no
     # "--no-context". SRT output is parsed back into Segments.
-    from harvest import transcribe as T
+    from blisolver import transcribe as T
     audio, captured = _stub_whisper_cli(monkeypatch, tmp_path)
     segs = T.transcribe(audio, model="ggml.bin")
     cmd = captured["cmd"]
@@ -48,7 +48,7 @@ def test_transcribe_defaults_language_to_none(monkeypatch, tmp_path):
 
 def test_transcribe_threads_explicit_lang(monkeypatch, tmp_path):
     # explicit lang="zh" => "-l zh" on the whisper-cli argv; robust=True => "--no-context".
-    from harvest import transcribe as T
+    from blisolver import transcribe as T
     audio, captured = _stub_whisper_cli(monkeypatch, tmp_path)
     T.transcribe(audio, model="ggml.bin", lang="zh", robust=True)
     cmd = captured["cmd"]
@@ -103,7 +103,7 @@ def _fake_ydl_factory(monkeypatch, info, writes=None):
         opts["_test_writes"] = writes
         return _FakeYDL(opts)
 
-    from harvest import transcribe as T
+    from blisolver import transcribe as T
     fake_mod = types.SimpleNamespace(YoutubeDL=make)
     monkeypatch.setattr(T, "yt_dlp", fake_mod)
 
@@ -113,7 +113,7 @@ def _canon(platform="youtube.com"):
 
 
 def test_download_audio_returns_filepath_from_requested_downloads(tmp_path, monkeypatch):
-    from harvest import transcribe as T
+    from blisolver import transcribe as T
     s = Settings(cache_dir=tmp_path)
     audio = tmp_path / "audio"
     audio.mkdir(parents=True)
@@ -131,7 +131,7 @@ def test_download_audio_returns_filepath_from_requested_downloads(tmp_path, monk
 def test_download_audio_recovers_via_glob_when_filepath_missing(tmp_path, monkeypatch):
     # The reported failure mode: requested_downloads[0] lacks a filepath key entirely, but the
     # file IS on disk. Recover it via the glob instead of raising a bare StopIteration.
-    from harvest import transcribe as T
+    from blisolver import transcribe as T
     s = Settings(cache_dir=tmp_path)
     audio = tmp_path / "audio"
     audio.mkdir(parents=True)
@@ -149,7 +149,7 @@ def test_download_audio_recovers_via_glob_when_filepath_missing(tmp_path, monkey
 def test_download_audio_raises_descriptive_error_when_no_file(tmp_path, monkeypatch):
     # issue #3: download "succeeded" (no exception) but wrote no file -> fail loud, not a bare
     # StopIteration. The message must name the expected pattern and the yt-dlp info keys.
-    from harvest import transcribe as T
+    from blisolver import transcribe as T
     s = Settings(cache_dir=tmp_path)
     info = {"requested_downloads": [{"asr": 44100}], "id": "F8X9_Dp3ZUk"}
     _fake_ydl_factory(monkeypatch, info, writes=None)  # writes nothing
@@ -162,7 +162,7 @@ def test_download_audio_raises_descriptive_error_when_no_file(tmp_path, monkeypa
 
 def test_download_audio_youtube_uses_native_downloader(tmp_path, monkeypatch):
     # issue #3 root-cause mitigation: the YouTube audio path must NOT hand the download to aria2c.
-    from harvest import transcribe as T
+    from blisolver import transcribe as T
     s = Settings(cache_dir=tmp_path, aria2c_path="C:/aria2c.exe")
     audio = tmp_path / "audio"
     audio.mkdir(parents=True)
@@ -174,7 +174,7 @@ def test_download_audio_youtube_uses_native_downloader(tmp_path, monkeypatch):
 
 
 def test_download_audio_bilibili_keeps_aria2c(tmp_path, monkeypatch):
-    from harvest import transcribe as T
+    from blisolver import transcribe as T
     s = Settings(cache_dir=tmp_path, aria2c_path="C:/aria2c.exe")
     audio = tmp_path / "audio"
     audio.mkdir(parents=True)

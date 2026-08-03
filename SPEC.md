@@ -1,18 +1,18 @@
-# harvest — Design Spec
+# blisolver — Design Spec
 
-> Authoritative design for **harvest**: a multi-source video → knowledge-bundle ingestion tool.
+> Authoritative design for **blisolver**: a multi-source video → knowledge-bundle ingestion tool.
 > This is the single source of truth for *what* to build and *why*. [PROTOCOL.md](PROTOCOL.md) is
 > the machine-facing contract the downstream **Atlas** project codes against; [README.md](README.md)
 > is the human quickstart.
 >
-> harvest is the successor to `bili-tool` (bilibili-only). It keeps that tool's proven, platform-
+> blisolver is the successor to `bili-tool` (bilibili-only). It keeps that tool's proven, platform-
 > agnostic back-end and generalizes the acquisition front-end to multiple sources.
 
 ---
 
 ## 1. What it is
 
-harvest is the **ingestion front-door** for the Atlas knowledge base. Given a video URL from a
+blisolver is the **ingestion front-door** for the Atlas knowledge base. Given a video URL from a
 supported source, it produces a timeline-aligned, self-contained **bundle**:
 
 - an **original-language transcript** (reuse trustworthy captions, else faster-whisper), and
@@ -20,7 +20,7 @@ supported source, it produces a timeline-aligned, self-contained **bundle**:
 
 The tool **starts** at a URL and **ends** at `out/<id>-p<part>/` (`bundle.md` + `bundle.json` +
 `frames/`). It does **not** summarize or extract entities — that judgment lives downstream in Atlas.
-Keep this seam clean: harvest is a deterministic batch unit; everything interpretive happens
+Keep this seam clean: blisolver is a deterministic batch unit; everything interpretive happens
 elsewhere.
 
 The defining superpower is **authenticated acquisition from walled/rich media sources, then do
@@ -49,7 +49,7 @@ grades) as the opt-in `--interactions` track (both bilibili only; see §8 and PR
 
 ## 4. Architecture — modular monolith
 
-harvest is a **modular monolith**, not microservices: the pipeline shuttles large local artifacts
+blisolver is a **modular monolith**, not microservices: the pipeline shuttles large local artifacts
 (video, audio, frames) and is GPU-bound on one local GPU, so data locality and a shared local cache
 beat any network decomposition. Two internal seams give the extensibility of services without the
 distributed-systems tax:
@@ -256,7 +256,7 @@ no-captions baseline → `whisper`.
 - **Single-part atomic unit; `--all-parts` is isolate-and-continue.** `{platform, id, part}` → one
   bundle dir. `--all-parts` loops the single-part pipeline; a failed part logs and continues; re-runs
   skip done parts via caching. YouTube v1 is always `part=1`; a future playlist entry maps to a part.
-- **CLI verb grammar.** `harvest <verb> <url>`: `ingest` (full pipeline), `probe` (cheap metadata, no
+- **CLI verb grammar.** `blisolver <verb> <url>`: `ingest` (full pipeline), `probe` (cheap metadata, no
   media). No bare-url form. Scales to future verbs (`collect`, …) and sources.
 - **Danmaku acquisition = the protobuf census endpoint (`seg.so`), not WBI-signed sampling.**
   `fetched_total` is the currently-live danmaku the census returns, `≤ source_total` by nature —
@@ -289,10 +289,10 @@ no-captions baseline → `whisper`.
 ## 9. Repository layout (target)
 
 ```
-harvest/
+blisolver/
 ├── SPEC.md · PROTOCOL.md · README.md
 ├── pyproject.toml · .env.example
-├── harvest/
+├── blisolver/
 │   ├── cli.py              # verb dispatch, per-part orchestration
 │   ├── config.py           # settings + per-provider auth/secret loading
 │   ├── schema.py           # pydantic Bundle/SourceMetadata/ProbeResult (the contract)
@@ -307,7 +307,7 @@ harvest/
 └── cache/                  # gitignored per-stage artifacts
 ```
 
-> The package rename (`bili_tool` → `harvest`), env prefix (`BILI_*`/`SESSDATA` → `HARVEST_*` +
+> The package rename (`bili_tool` → `blisolver`), env prefix (`BILI_*`/`SESSDATA` → `BLISOLVER_*` +
 > per-provider), and git remote are a mechanical pass folded into the refactor.
 
 ## 10. Known follow-ups (deferred, not defects)

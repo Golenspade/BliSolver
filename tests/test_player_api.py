@@ -4,8 +4,8 @@ from dataclasses import replace as _replace  # noqa: F401  (kept explicit for cl
 
 import pytest
 
-from harvest.config import Settings
-from harvest.player_api import (
+from blisolver.config import Settings
+from blisolver.player_api import (
     ViewData,
     ViewError,
     ViewPage,
@@ -13,7 +13,7 @@ from harvest.player_api import (
     fetch_view,
     published_at_iso,
 )
-from harvest.resolve import Canonical
+from blisolver.resolve import Canonical
 
 
 def test_cid_for_part_matches_page_number():
@@ -71,7 +71,7 @@ def _canonical(part: int = 1) -> Canonical:
 
 
 def _view_url(canonical: Canonical) -> str:
-    from harvest.player_api import _API_VIEW
+    from blisolver.player_api import _API_VIEW
 
     return _API_VIEW.format(bvid=canonical.id)
 
@@ -339,7 +339,7 @@ def test_cid_for_part_via_view_data_page_number_match():
 
 
 def _seg_url(cid: int, idx: int) -> str:
-    from harvest.player_api import _API_DANMAKU_SEG
+    from blisolver.player_api import _API_DANMAKU_SEG
 
     return _API_DANMAKU_SEG.format(cid=cid, idx=idx)
 
@@ -368,7 +368,7 @@ def _mid_hash(mid: int) -> str:
 
 
 def test_classify_authors_tags_owner_staff_and_leaves_crowd_and_hashless():
-    from harvest.player_api import RawDanmaku, classify_authors
+    from blisolver.player_api import RawDanmaku, classify_authors
     records = [
         RawDanmaku(content_ts=1.0, text="owner note", mid_hash=_mid_hash(7)),
         RawDanmaku(content_ts=2.0, text="staff note", mid_hash=_mid_hash(99)),
@@ -382,21 +382,21 @@ def test_classify_authors_tags_owner_staff_and_leaves_crowd_and_hashless():
 
 
 def test_classify_authors_owner_precedence_when_owner_also_in_staff():
-    from harvest.player_api import RawDanmaku, classify_authors
+    from blisolver.player_api import RawDanmaku, classify_authors
     records = [RawDanmaku(content_ts=1.0, text="x", mid_hash=_mid_hash(7))]
     out = classify_authors(records, owner_mid=7, staff_mids=[7])
     assert out[0].author == "owner"
 
 
 def test_classify_authors_no_author_mids_returns_input_unchanged():
-    from harvest.player_api import RawDanmaku, classify_authors
+    from blisolver.player_api import RawDanmaku, classify_authors
     records = [RawDanmaku(content_ts=1.0, text="x", mid_hash=_mid_hash(7))]
     out = classify_authors(records, owner_mid=None, staff_mids=[])
     assert out is records  # no-op fast path, same list object
 
 
 def test_classify_authors_tolerates_unparseable_mid_hash():
-    from harvest.player_api import RawDanmaku, classify_authors
+    from blisolver.player_api import RawDanmaku, classify_authors
     records = [RawDanmaku(content_ts=1.0, text="x", mid_hash="not-hex")]
     out = classify_authors(records, owner_mid=7, staff_mids=[])
     assert out[0].author is None
@@ -428,7 +428,7 @@ def _encode_seg(elems: list[tuple]) -> bytes:
 
 
 def test_fetch_danmaku_classifies_author_from_view_owner_and_staff():
-    from harvest.player_api import fetch_danmaku
+    from blisolver.player_api import fetch_danmaku
 
     canonical = _canonical(part=1)
     view_payload = {
@@ -459,7 +459,7 @@ def test_fetch_danmaku_classifies_author_from_view_owner_and_staff():
 
 
 def test_fetch_danmaku_pages_segments_until_empty_and_orders_chronologically():
-    from harvest.player_api import fetch_danmaku
+    from blisolver.player_api import fetch_danmaku
 
     canonical = _canonical(part=1)
     view_payload = {
@@ -495,7 +495,7 @@ def test_fetch_danmaku_pages_segments_until_empty_and_orders_chronologically():
 
 
 def test_fetch_danmaku_terminates_on_non_protobuf_json_error_body():
-    from harvest.player_api import fetch_danmaku
+    from blisolver.player_api import fetch_danmaku
 
     canonical = _canonical(part=1)
     view_payload = {
@@ -525,7 +525,7 @@ def test_fetch_danmaku_partial_on_mid_pagination_error(caplog):
     import logging
     from urllib.error import URLError
 
-    from harvest.player_api import fetch_danmaku
+    from blisolver.player_api import fetch_danmaku
 
     canonical = _canonical(part=1)
     view_payload = {
@@ -558,7 +558,7 @@ def test_fetch_danmaku_partial_on_mid_pagination_error(caplog):
 
 def test_fetch_danmaku_accepts_prefetched_view_and_skips_view_get():
     """Task 4: when `view` is supplied, fetch_danmaku must NOT hit the view endpoint at all."""
-    from harvest.player_api import fetch_danmaku
+    from blisolver.player_api import fetch_danmaku
 
     canonical = _canonical(part=1)
     view = ViewData(aid=42, cid=100, danmaku_count=5, pages=[ViewPage(part=1, cid=100)])
@@ -574,7 +574,7 @@ def test_fetch_danmaku_accepts_prefetched_view_and_skips_view_get():
 
 
 def test_fetch_danmaku_no_cid_returns_empty_result_not_raise():
-    from harvest.player_api import fetch_danmaku
+    from blisolver.player_api import fetch_danmaku
 
     canonical = _canonical(part=9)  # out of range -> no cid
     view = ViewData(aid=42, cid=100, danmaku_count=5, pages=[ViewPage(part=1, cid=100)])
@@ -589,7 +589,7 @@ def test_fetch_danmaku_no_cid_returns_empty_result_not_raise():
 
 
 def test_fetch_danmaku_view_error_returns_empty_result_not_raise():
-    from harvest.player_api import fetch_danmaku
+    from blisolver.player_api import fetch_danmaku
 
     canonical = _canonical(part=1)
     opener = _FakeOpener({_view_url(canonical): {"code": -400, "message": "nope"}})
@@ -608,7 +608,7 @@ def test_fetch_danmaku_no_warning_on_clean_past_end_termination(caplog):
     import logging
     from urllib.error import HTTPError
 
-    from harvest.player_api import fetch_danmaku
+    from blisolver.player_api import fetch_danmaku
 
     canonical = _canonical(part=1)
     view_payload = {
@@ -650,7 +650,7 @@ def test_fetch_danmaku_warns_on_genuine_mid_stream_truncation(caplog):
     import logging
     from urllib.error import HTTPError
 
-    from harvest.player_api import fetch_danmaku
+    from blisolver.player_api import fetch_danmaku
 
     canonical = _canonical(part=1)
     view_payload = {
@@ -690,8 +690,8 @@ def test_live_fetch_danmaku_census_does_not_truncate_multi_segment_video():
     (-m 'not live'); run explicitly with `-m live` against a real, sufficiently long video."""
     import math
 
-    from harvest.player_api import _opener, fetch_danmaku
-    from harvest.resolve import resolve
+    from blisolver.player_api import _opener, fetch_danmaku
+    from blisolver.resolve import resolve
 
     settings = Settings.load()
     # A long-form upload -- swap for any known multi-segment (>360s) public BV if this one

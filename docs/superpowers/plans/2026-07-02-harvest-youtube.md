@@ -1,8 +1,8 @@
-# harvest — YouTube Provider Implementation Plan
+# blisolver — YouTube Provider Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Rename `bili_tool`→`harvest`, generalize the bundle schema to the PROTOCOL 1.0 multi-source contract, introduce a per-source `Provider` seam, and add a YouTube provider — so `harvest ingest/probe` works for both bilibili.com and youtube.com.
+**Goal:** Rename `bili_tool`→`blisolver`, generalize the bundle schema to the PROTOCOL 1.0 multi-source contract, introduce a per-source `Provider` seam, and add a YouTube provider — so `blisolver ingest/probe` works for both bilibili.com and youtube.com.
 
 **Architecture:** A `Provider` protocol (selected by URL) owns *only* platform-specific acquisition and produces a normalized `SourceMetadata`; everything downstream (`merge`, `probe`, transcript decision) reads normalized outputs and never branches on platform. The existing, tested bilibili logic is wrapped behind the interface (adapter, not rewrite); YouTube is native yt-dlp with an exact-key caption rule.
 
@@ -12,7 +12,7 @@
 
 Every task's requirements implicitly include this section. Values are copied verbatim from SPEC.md / PROTOCOL.md.
 
-- **Package name is `harvest`.** After Task 1 there is no `bili_tool` module and no `bili-tool` string in code, `pyproject.toml`, or test imports. Console script: `harvest = "harvest.cli:main"`.
+- **Package name is `blisolver`.** After Task 1 there is no `bili_tool` module and no `bili-tool` string in code, `pyproject.toml`, or test imports. Console script: `blisolver = "blisolver.cli:main"`.
 - **`SCHEMA_VERSION = "1.0"`** (a fresh contract, not a bili-tool patch). Never re-introduce `"1.1"`.
 - **`platform` in `{"bilibili.com", "bilibili.tv", "youtube.com"}`** — `bilibili.tv` stays a resolve-only, probe/ingest-unsupported placeholder (deferred).
 - **`uploader_id: str | None`** everywhere. The integer `uploader_mid` field is **removed** from `ProbeResult` and `Bundle`. bilibili emits `uploader_id=str(mid)`; YouTube emits `info["channel_id"]` (`UC...`).
@@ -29,9 +29,9 @@ Every task's requirements implicitly include this section. Values are copied ver
 This is the map the tasks below build toward — not a step to execute, but the decomposition contract.
 
 ```
-harvest/
+blisolver/
 ├── cli.py            # verb dispatch; select_provider(url); --lang; per-part orchestration
-├── config.py         # Settings; HARVEST_* env; per-provider auth
+├── config.py         # Settings; BLISOLVER_* env; per-provider auth
 ├── schema.py         # pydantic Bundle/ProbeResult/Transcript (PROTOCOL 1.0)
 ├── providers/
 │   ├── __init__.py
@@ -46,27 +46,27 @@ harvest/
 ├── probe.py · merge.py · frames.py · vision.py · cache.py · parts.py
 ```
 
-**Decision — `Canonical` lives in `providers/base.py`.** It is the shared vocabulary of the provider seam (every `Provider` method consumes/produces it). `resolve.py` will import it from `base` and re-export it for backward compatibility, so existing `from harvest.resolve import Canonical` call sites keep working with zero churn. Justification: putting the seam's core type in the seam's module avoids `resolve.py` (a bilibili-specific module) owning a now-cross-platform type, while the re-export keeps the Task-1 rename mechanical.
+**Decision — `Canonical` lives in `providers/base.py`.** It is the shared vocabulary of the provider seam (every `Provider` method consumes/produces it). `resolve.py` will import it from `base` and re-export it for backward compatibility, so existing `from blisolver.resolve import Canonical` call sites keep working with zero churn. Justification: putting the seam's core type in the seam's module avoids `resolve.py` (a bilibili-specific module) owning a now-cross-platform type, while the re-export keeps the Task-1 rename mechanical.
 
 ---
 
-## Task 1: Rename package `bili_tool` -> `harvest`
+## Task 1: Rename package `bili_tool` -> `blisolver`
 
 Mechanical, no behavior change. The clean foundation everything else builds on. This is one reviewable unit because it must land atomically — a half-renamed tree does not import.
 
 **Files:**
-- Rename: `bili_tool/` -> `harvest/` (via `git mv`)
-- Modify: every `.py` under `harvest/` and `tests/` (import lines + `prog=` string)
+- Rename: `bili_tool/` -> `blisolver/` (via `git mv`)
+- Modify: every `.py` under `blisolver/` and `tests/` (import lines + `prog=` string)
 - Modify: `pyproject.toml` (`[project].name`, `[project.scripts]`, `[tool.hatch.build.targets.wheel].packages`)
 
 **Interfaces:**
 - Consumes: nothing (first task).
-- Produces: importable package `harvest` with identical public API; console entry `harvest.cli:main`. All later tasks import from `harvest.*`.
+- Produces: importable package `blisolver` with identical public API; console entry `blisolver.cli:main`. All later tasks import from `blisolver.*`.
 
 - [ ] **Step 1: Move the package directory (preserves git history)**
 
 ```bash
-git mv bili_tool harvest
+git mv bili_tool blisolver
 ```
 
 - [ ] **Step 2: Run the suite to see it fail (imports now broken)**
@@ -77,42 +77,42 @@ Expected: collection errors / `ModuleNotFoundError: No module named 'bili_tool'`
 - [ ] **Step 3: Confirm the package has no absolute self-imports**
 
 Package modules already use relative imports (`from .config import ...`, `from . import __version__`), so they need no change. Verify:
-Run: `grep -rn "bili_tool" harvest/` — expected: no output. Fix any absolute `bili_tool` reference if one appears.
+Run: `grep -rn "bili_tool" blisolver/` — expected: no output. Fix any absolute `bili_tool` reference if one appears.
 
 - [ ] **Step 4: Rewrite the CLI `prog` string**
 
-In `harvest/cli.py`, `parse_args`:
+In `blisolver/cli.py`, `parse_args`:
 old: `p = argparse.ArgumentParser(prog="bili-tool", description=__doc__)`
-new: `p = argparse.ArgumentParser(prog="harvest", description=__doc__)`
+new: `p = argparse.ArgumentParser(prog="blisolver", description=__doc__)`
 
 - [ ] **Step 5: Rewrite every test import**
 
-In every file under `tests/`, replace `bili_tool` with `harvest` on import lines (e.g. `from bili_tool.config import Settings` -> `from harvest.config import Settings`; `from bili_tool import cli` -> `from harvest import cli`; also inside function bodies, e.g. `from bili_tool.schema import ...`). The `from tests.test_player_api import _FakeOpener, _view_url` cross-import in `tests/test_probe.py` is unaffected.
+In every file under `tests/`, replace `bili_tool` with `blisolver` on import lines (e.g. `from bili_tool.config import Settings` -> `from blisolver.config import Settings`; `from bili_tool import cli` -> `from blisolver import cli`; also inside function bodies, e.g. `from bili_tool.schema import ...`). The `from tests.test_player_api import _FakeOpener, _view_url` cross-import in `tests/test_probe.py` is unaffected.
 
 - [ ] **Step 6: Update `pyproject.toml`**
 
 ```toml
 [project]
-name = "harvest"
+name = "blisolver"
 
 [project.scripts]
-harvest = "harvest.cli:main"
+blisolver = "blisolver.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["harvest"]
+packages = ["blisolver"]
 ```
 
 - [ ] **Step 7: Run the full suite green**
 
 Run: `./.venv/Scripts/python.exe -m pytest -q`
 Expected: PASS (95 tests). Then:
-Run: `grep -rn "bili_tool" harvest/ tests/ pyproject.toml` — expected: no output.
+Run: `grep -rn "bili_tool" blisolver/ tests/ pyproject.toml` — expected: no output.
 
 - [ ] **Step 8: Commit**
 
 ```bash
 git add -A
-git commit -m "refactor: rename package bili_tool -> harvest
+git commit -m "refactor: rename package bili_tool -> blisolver
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```
@@ -126,15 +126,15 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 Turn `schema.py` into the multi-source 1.0 contract and fix every producer/consumer that breaks, keeping the suite green. One unit: the field changes and their call-site fixups are inseparable (the suite is red until all land).
 
 **Files:**
-- Modify: `harvest/schema.py`
-- Modify: `harvest/player_api.py` (`part_segments` language-key comment)
-- Modify: `harvest/subtitles.py` (`_pick_track`/`_acquire` provenance labels, `SubtitleResult` comment)
-- Modify: `harvest/probe.py` (`uploader_mid=` -> `uploader_id=`)
-- Modify: `harvest/merge.py` (`uploader_mid` build + markdown header)
+- Modify: `blisolver/schema.py`
+- Modify: `blisolver/player_api.py` (`part_segments` language-key comment)
+- Modify: `blisolver/subtitles.py` (`_pick_track`/`_acquire` provenance labels, `SubtitleResult` comment)
+- Modify: `blisolver/probe.py` (`uploader_mid=` -> `uploader_id=`)
+- Modify: `blisolver/merge.py` (`uploader_mid` build + markdown header)
 - Test: `tests/test_probe.py`, `tests/test_cli.py`, `tests/test_merge.py`, `tests/test_subtitles.py`
 
 **Interfaces:**
-- Consumes: `harvest` package (Task 1).
+- Consumes: `blisolver` package (Task 1).
 - Produces:
   - `SCHEMA_VERSION = "1.0"`
   - `Platform = Literal["bilibili.com", "bilibili.tv", "youtube.com"]`
@@ -148,12 +148,12 @@ Add to `tests/test_probe.py`:
 
 ```python
 def test_schema_version_is_1_0():
-    from harvest.schema import SCHEMA_VERSION
+    from blisolver.schema import SCHEMA_VERSION
     assert SCHEMA_VERSION == "1.0"
 
 
 def test_probe_result_uses_uploader_id_string():
-    from harvest.schema import ProbeResult
+    from blisolver.schema import ProbeResult
     r = ProbeResult(platform="youtube.com", id="x", uploader_id="UCabc", parts=1)
     assert r.uploader_id == "UCabc"
     assert not hasattr(r, "uploader_mid")
@@ -164,7 +164,7 @@ def test_probe_result_uses_uploader_id_string():
 Run: `./.venv/Scripts/python.exe -m pytest tests/test_probe.py::test_schema_version_is_1_0 tests/test_probe.py::test_probe_result_uses_uploader_id_string -q`
 Expected: FAIL (`SCHEMA_VERSION == "1.1"`; `youtube.com` not a valid Platform; `uploader_id` unknown field).
 
-- [ ] **Step 3: Edit `harvest/schema.py`**
+- [ ] **Step 3: Edit `blisolver/schema.py`**
 
 ```python
 SCHEMA_VERSION = "1.0"
@@ -185,7 +185,7 @@ Keep the *track/language key* `"ai-zh"` in `_ZH_KEYS` (bilibili's wire key), but
 - In `_acquire`, the player-API fallback: `return "auto-sub", lang, segments` (was `"ai-zh"`).
 - `SubtitleResult.source` comment `# "human-sub" | "ai-zh" | None` -> `# "human-sub" | "auto-sub" | None`.
 
-In `harvest/player_api.py`, `part_segments` returns `(pick.get("lan") or "ai-zh"), segments`. The first element is the **language key**, not provenance — leave `"ai-zh"` and add a comment: `# language key (provenance set to "auto-sub" by subtitles._acquire)`.
+In `blisolver/player_api.py`, `part_segments` returns `(pick.get("lan") or "ai-zh"), segments`. The first element is the **language key**, not provenance — leave `"ai-zh"` and add a comment: `# language key (provenance set to "auto-sub" by subtitles._acquire)`.
 
 - [ ] **Step 5: Fix `probe.py`**
 
@@ -201,8 +201,8 @@ Update `tests/test_probe.py`, `tests/test_cli.py` (`fake_probe`), `tests/test_me
 
 Run: `./.venv/Scripts/python.exe -m pytest -q`
 Expected: PASS.
-Run: `grep -rn "uploader_mid" harvest/ tests/` — expected: no output.
-Run: `grep -rn '"ai-zh"' harvest/` — expected: only the language-key occurrences in `_ZH_KEYS` and `player_api.part_segments`, none as a provenance label.
+Run: `grep -rn "uploader_mid" blisolver/ tests/` — expected: no output.
+Run: `grep -rn '"ai-zh"' blisolver/` — expected: only the language-key occurrences in `_ZH_KEYS` and `player_api.part_segments`, none as a provenance label.
 
 - [ ] **Step 8: Commit**
 
@@ -220,13 +220,13 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 Pure definitions plus registry dispatch. No provider registers yet (Tasks 4/5 do). Split from the providers so the registry contract is independently reviewable with stubs.
 
 **Files:**
-- Create: `harvest/providers/__init__.py`
-- Create: `harvest/providers/base.py`
-- Modify: `harvest/resolve.py` (import + re-export `Canonical` from `base`)
+- Create: `blisolver/providers/__init__.py`
+- Create: `blisolver/providers/base.py`
+- Modify: `blisolver/resolve.py` (import + re-export `Canonical` from `base`)
 - Test: `tests/test_providers_base.py`
 
 **Interfaces:**
-- Consumes: `harvest.schema.Platform`, `harvest.schema.Segment`.
+- Consumes: `blisolver.schema.Platform`, `blisolver.schema.Segment`.
 - Produces:
   - `@dataclass(frozen=True) class Canonical`: `platform: Platform`, `id: str`, `part: int`, `url: str`.
   - `@dataclass class SourceMetadata`: `platform`, `id`, `title`, `uploader`, `uploader_id`, `description`, `duration_s`, `published_at`, `parts`, `part_durations_s`.
@@ -241,8 +241,8 @@ Pure definitions plus registry dispatch. No provider registers yet (Tasks 4/5 do
 ```python
 import pytest
 
-from harvest.providers import base
-from harvest.providers.base import Canonical, SourceMetadata, register, select_provider
+from blisolver.providers import base
+from blisolver.providers.base import Canonical, SourceMetadata, register, select_provider
 
 
 class _StubA:
@@ -287,15 +287,15 @@ def test_source_metadata_holds_normalized_fields():
 - [ ] **Step 2: Run to verify failure**
 
 Run: `./.venv/Scripts/python.exe -m pytest tests/test_providers_base.py -q`
-Expected: FAIL (`No module named 'harvest.providers'`).
+Expected: FAIL (`No module named 'blisolver.providers'`).
 
-- [ ] **Step 3: Create `harvest/providers/__init__.py`**
+- [ ] **Step 3: Create `blisolver/providers/__init__.py`**
 
 ```python
 """Per-source provider seam (SPEC §4.1)."""
 ```
 
-- [ ] **Step 4: Create `harvest/providers/base.py`**
+- [ ] **Step 4: Create `blisolver/providers/base.py`**
 
 ```python
 """Provider seam (SPEC §4.1): URL-selected, platform-specific acquisition only.
@@ -384,13 +384,13 @@ def select_provider(url: str) -> Provider:
 
 - [ ] **Step 5: Re-export `Canonical` from `resolve.py`**
 
-In `harvest/resolve.py`, delete the local `@dataclass(frozen=True) class Canonical` definition. Add:
+In `blisolver/resolve.py`, delete the local `@dataclass(frozen=True) class Canonical` definition. Add:
 
 ```python
 from .providers.base import Canonical  # re-exported for backward-compatible import paths
 ```
 
-Keep `from .schema import Platform` (used by the `platform: Platform` local annotation inside `resolve()`). Verify `from harvest.resolve import Canonical` still works.
+Keep `from .schema import Platform` (used by the `platform: Platform` local annotation inside `resolve()`). Verify `from blisolver.resolve import Canonical` still works.
 
 > Import-cycle check: `providers/base` imports only `..schema` (no `resolve`); `resolve` imports `providers.base`. No cycle.
 
@@ -415,11 +415,11 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 Wrap the existing, tested bilibili code behind the `Provider` interface. Move/adapter, not a rewrite: `resolve.py`, `player_api.py`, and `subtitles.py`'s bilibili path stay and are called by the provider. One unit: the adapter is only meaningful once all methods delegate correctly, and existing bilibili tests must stay green.
 
 **Files:**
-- Create: `harvest/providers/bilibili.py`
+- Create: `blisolver/providers/bilibili.py`
 - Test: `tests/test_providers_bilibili.py`
 
 **Interfaces:**
-- Consumes: `resolve()` from `harvest.resolve`; `fetch_view`, `ViewError`, `published_at_iso` from `harvest.player_api`; `part_url` from `harvest.parts`; `extract_info`, `fetch_subtitle_segments`, `ydl_opts`, `probe` (as `subtitle_probe`) from `harvest.subtitles`; `evaluate`, `describe_failure` from `harvest.quality`; `Canonical`, `SourceMetadata`, `SubtitleOutcome`, `register` from `harvest.providers.base`.
+- Consumes: `resolve()` from `blisolver.resolve`; `fetch_view`, `ViewError`, `published_at_iso` from `blisolver.player_api`; `part_url` from `blisolver.parts`; `extract_info`, `fetch_subtitle_segments`, `ydl_opts`, `probe` (as `subtitle_probe`) from `blisolver.subtitles`; `evaluate`, `describe_failure` from `blisolver.quality`; `Canonical`, `SourceMetadata`, `SubtitleOutcome`, `register` from `blisolver.providers.base`.
 - Produces: `class BilibiliProvider` implementing `Provider`; `fetch_subtitle` returns a `SubtitleOutcome` after running the FULL bilibili trust decision (probe tier-1/tier-2 #6357 + quality gate) internally; import registers `BilibiliProvider()`.
 
 - [ ] **Step 1: Write failing provider tests (offline, opener-injected)**
@@ -427,9 +427,9 @@ Wrap the existing, tested bilibili code behind the `Provider` interface. Move/ad
 `tests/test_providers_bilibili.py`:
 
 ```python
-from harvest.config import Settings
-from harvest.providers.base import Canonical, SourceMetadata
-from harvest.providers.bilibili import BilibiliProvider
+from blisolver.config import Settings
+from blisolver.providers.base import Canonical, SourceMetadata
+from blisolver.providers.bilibili import BilibiliProvider
 from tests.test_player_api import _FakeOpener, _view_url
 
 
@@ -482,9 +482,9 @@ def test_enumerate_parts_counts_view_pages():
 # Monkeypatch the provider's collaborators so these stay offline and pin the OUTCOME contract.
 
 def test_fetch_subtitle_accepts_when_gate_passes(monkeypatch):
-    from harvest.providers import bilibili as biliprov
-    from harvest.schema import QualityGate, Segment
-    from harvest.subtitles import SubtitleResult
+    from blisolver.providers import bilibili as biliprov
+    from blisolver.schema import QualityGate, Segment
+    from blisolver.subtitles import SubtitleResult
 
     p = BilibiliProvider()
     segs = [Segment(start=0.0, end=1.0, text="你好")]
@@ -500,9 +500,9 @@ def test_fetch_subtitle_accepts_when_gate_passes(monkeypatch):
 
 
 def test_fetch_subtitle_rejects_when_gate_fails_and_carries_gate(monkeypatch):
-    from harvest.providers import bilibili as biliprov
-    from harvest.schema import QualityGate, Segment
-    from harvest.subtitles import SubtitleResult
+    from blisolver.providers import bilibili as biliprov
+    from blisolver.schema import QualityGate, Segment
+    from blisolver.subtitles import SubtitleResult
 
     p = BilibiliProvider()
     failed = QualityGate(passed=False, punct_density=0.0, dup_ratio=0.9, nonzh_ratio=0.0, cps=1.0)
@@ -518,8 +518,8 @@ def test_fetch_subtitle_rejects_when_gate_fails_and_carries_gate(monkeypatch):
 
 
 def test_fetch_subtitle_rejected_when_probe_not_found_no_gate(monkeypatch):
-    from harvest.providers import bilibili as biliprov
-    from harvest.subtitles import SubtitleResult
+    from blisolver.providers import bilibili as biliprov
+    from blisolver.subtitles import SubtitleResult
 
     p = BilibiliProvider()
     monkeypatch.setattr(biliprov, "extract_info", lambda url, s: {"duration": 100})
@@ -535,9 +535,9 @@ def test_fetch_subtitle_rejected_when_probe_not_found_no_gate(monkeypatch):
 - [ ] **Step 2: Run to verify failure**
 
 Run: `./.venv/Scripts/python.exe -m pytest tests/test_providers_bilibili.py -q`
-Expected: FAIL (`No module named 'harvest.providers.bilibili'`).
+Expected: FAIL (`No module named 'blisolver.providers.bilibili'`).
 
-- [ ] **Step 3: Implement `harvest/providers/bilibili.py`**
+- [ ] **Step 3: Implement `blisolver/providers/bilibili.py`**
 
 ```python
 """BilibiliProvider: existing bilibili acquisition behind the Provider interface. Adapter.
@@ -678,12 +678,12 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 Small, independently testable. Needed by Task 6. Lands beside `parse_bcc`/`parse_srt`.
 
 **Files:**
-- Modify: `harvest/subtitles.py`
+- Modify: `blisolver/subtitles.py`
 - Test: `tests/test_subtitles.py`
 
 **Interfaces:**
-- Consumes: `harvest.schema.Segment`.
-- Produces: `parse_vtt(text: str) -> list[Segment]` in `harvest.subtitles`.
+- Consumes: `blisolver.schema.Segment`.
+- Produces: `parse_vtt(text: str) -> list[Segment]` in `blisolver.subtitles`.
 
 - [ ] **Step 1: Write failing test**
 
@@ -691,7 +691,7 @@ Add to `tests/test_subtitles.py`:
 
 ```python
 def test_parse_vtt_basic_cues():
-    from harvest.subtitles import parse_vtt
+    from blisolver.subtitles import parse_vtt
     vtt = (
         "WEBVTT\n\n"
         "00:00:00.000 --> 00:00:02.500\nHello world\n\n"
@@ -704,7 +704,7 @@ def test_parse_vtt_basic_cues():
 
 
 def test_parse_vtt_ignores_header_notes_and_cue_ids():
-    from harvest.subtitles import parse_vtt
+    from blisolver.subtitles import parse_vtt
     vtt = (
         "WEBVTT - Kind: captions\n\n"
         "NOTE this is a comment\n\n"
@@ -719,7 +719,7 @@ def test_parse_vtt_ignores_header_notes_and_cue_ids():
 Run: `./.venv/Scripts/python.exe -m pytest tests/test_subtitles.py -k parse_vtt -q`
 Expected: FAIL (`cannot import name 'parse_vtt'`).
 
-- [ ] **Step 3: Implement `parse_vtt` in `harvest/subtitles.py`**
+- [ ] **Step 3: Implement `parse_vtt` in `blisolver/subtitles.py`**
 
 Add near `parse_srt`. It reuses the existing `_SRT_TIME` regex — WebVTT `.`-separated millis are matched by its `[,.]` alternative. A cue block is the blank-line-delimited block that contains a timing line; header/`NOTE` blocks have no timing line and are skipped:
 
@@ -764,11 +764,11 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 Native yt-dlp metadata + the exact-key caption rule (SPEC §6). All tests drive off the captured `tests/fixtures/youtube/*.info.json` fixtures + a mocked track fetch; the default suite never hits the network.
 
 **Files:**
-- Create: `harvest/providers/youtube.py`
+- Create: `blisolver/providers/youtube.py`
 - Test: `tests/test_providers_youtube.py`
 
 **Interfaces:**
-- Consumes: `Canonical`, `SourceMetadata`, `SubtitleOutcome`, `register` from `harvest.providers.base`; `parse_vtt`, `ydl_opts` from `harvest.subtitles`.
+- Consumes: `Canonical`, `SourceMetadata`, `SubtitleOutcome`, `register` from `blisolver.providers.base`; `parse_vtt`, `ydl_opts` from `blisolver.subtitles`.
 - Produces: `class YouTubeProvider` implementing `Provider`; import registers a singleton. Helpers: `_video_id(url)`, `_published_at(info)`, `_metadata_from_info(info)`, `_target_lang(info, pinned)`, `fetch_subtitle(..., *, pinned_lang=None, info=None, fetch_url=None) -> SubtitleOutcome | None` (accepted `human-sub` outcome on an exact-key hit, else `None`).
 
 **Fixture facts (verified against `dQw4w9WgXcQ.info.json`):** `info` carries `id`, `title`, `description`, `duration`, `channel` (display name), `channel_id` (`UC...`), `timestamp` (epoch `1256453853`), `upload_date` (`20091025`), `language` (`"en"`), and `subtitles[lang] = [{"ext","name","url"}, ...]` with a `vtt` entry. yt-dlp's own `info["uploader_id"]` is the mutable `@handle` (`@RickAstleyYT`) — **do not use it**; use `channel_id`. Other fixtures: `kJQP7kiw5Fk` language `None` with `es`/`en-US-...` tracks; `9bZkp7q19f0` language `ko` with empty `subtitles`; `aqz-KE-bpKQ` language `None`, empty `subtitles`.
@@ -782,9 +782,9 @@ import io
 import json
 from pathlib import Path
 
-from harvest.config import Settings
-from harvest.providers.base import Canonical, SourceMetadata
-from harvest.providers.youtube import YouTubeProvider
+from blisolver.config import Settings
+from blisolver.providers.base import Canonical, SourceMetadata
+from blisolver.providers.youtube import YouTubeProvider
 
 FIX = Path(__file__).parent / "fixtures" / "youtube"
 
@@ -895,10 +895,10 @@ def test_fetch_subtitle_never_consults_automatic_captions():
 - [ ] **Step 3: Run to verify failure**
 
 Run: `./.venv/Scripts/python.exe -m pytest tests/test_providers_youtube.py -q`
-Expected: FAIL (`No module named 'harvest.providers.youtube'`).
+Expected: FAIL (`No module named 'blisolver.providers.youtube'`).
 
 ---
-- [ ] **Step 4: Implement `harvest/providers/youtube.py`**
+- [ ] **Step 4: Implement `blisolver/providers/youtube.py`**
 
 ```python
 """YouTubeProvider (SPEC §6): native yt-dlp metadata + exact-key human-caption reuse.
@@ -1052,7 +1052,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 Remove the hard-pinned `language="zh"`; thread a resolved language through so bilibili defaults to `zh`, YouTube to `None` (auto-detect), and `--lang` overrides both.
 
 **Files:**
-- Modify: `harvest/transcribe.py`
+- Modify: `blisolver/transcribe.py`
 - Test: `tests/test_transcribe.py` (new; test the param-plumbing seam, not a real CUDA decode)
 
 **Interfaces:**
@@ -1086,7 +1086,7 @@ def _install_fake_whisper(monkeypatch, recorder):
 
 
 def test_transcribe_defaults_language_to_none(monkeypatch):
-    from harvest import transcribe as T
+    from blisolver import transcribe as T
     monkeypatch.setattr(T, "_register_cuda_dlls", lambda: None)
     rec = {}
     _install_fake_whisper(monkeypatch, rec)
@@ -1096,7 +1096,7 @@ def test_transcribe_defaults_language_to_none(monkeypatch):
 
 
 def test_transcribe_threads_explicit_lang(monkeypatch):
-    from harvest import transcribe as T
+    from blisolver import transcribe as T
     monkeypatch.setattr(T, "_register_cuda_dlls", lambda: None)
     rec = {}
     _install_fake_whisper(monkeypatch, rec)
@@ -1109,7 +1109,7 @@ def test_transcribe_threads_explicit_lang(monkeypatch):
 Run: `./.venv/Scripts/python.exe -m pytest tests/test_transcribe.py -q`
 Expected: FAIL (`transcribe() got an unexpected keyword argument 'lang'`).
 
-- [ ] **Step 3: Edit `harvest/transcribe.py`**
+- [ ] **Step 3: Edit `blisolver/transcribe.py`**
 
 ```python
 def transcribe(
@@ -1152,17 +1152,17 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ---
 
-## Task 8: Config / env rename to HARVEST_*
+## Task 8: Config / env rename to BLISOLVER_*
 
-Rename env keys `BILI_*` -> `HARVEST_*`, keep per-provider auth, keep `REFERER` bilibili-scoped. Update `.env.example`.
+Rename env keys `BILI_*` -> `BLISOLVER_*`, keep per-provider auth, keep `REFERER` bilibili-scoped. Update `.env.example`.
 
 **Files:**
-- Modify: `harvest/config.py`
+- Modify: `blisolver/config.py`
 - Modify: `.env.example`
 - Test: `tests/test_config.py` (new)
 
 **Interfaces:**
-- Produces: `Settings.load()` reads `HARVEST_COOKIES_BROWSER`, `HARVEST_COOKIES_PROFILE`, `HARVEST_CACHE_DIR`, `HARVEST_OUT_DIR`; `SESSDATA` unchanged. `REFERER` stays a bilibili constant in `config.py`.
+- Produces: `Settings.load()` reads `BLISOLVER_COOKIES_BROWSER`, `BLISOLVER_COOKIES_PROFILE`, `BLISOLVER_CACHE_DIR`, `BLISOLVER_OUT_DIR`; `SESSDATA` unchanged. `REFERER` stays a bilibili constant in `config.py`.
 
 - [ ] **Step 1: Write failing test**
 
@@ -1171,14 +1171,14 @@ Rename env keys `BILI_*` -> `HARVEST_*`, keep per-provider auth, keep `REFERER` 
 ```python
 from pathlib import Path
 
-from harvest.config import Settings
+from blisolver.config import Settings
 
 
-def test_load_reads_harvest_env_keys(monkeypatch, tmp_path):
-    monkeypatch.setenv("HARVEST_COOKIES_BROWSER", "chrome")
-    monkeypatch.setenv("HARVEST_COOKIES_PROFILE", "Default")
-    monkeypatch.setenv("HARVEST_CACHE_DIR", str(tmp_path / "c"))
-    monkeypatch.setenv("HARVEST_OUT_DIR", str(tmp_path / "o"))
+def test_load_reads_blisolver_env_keys(monkeypatch, tmp_path):
+    monkeypatch.setenv("BLISOLVER_COOKIES_BROWSER", "chrome")
+    monkeypatch.setenv("BLISOLVER_COOKIES_PROFILE", "Default")
+    monkeypatch.setenv("BLISOLVER_CACHE_DIR", str(tmp_path / "c"))
+    monkeypatch.setenv("BLISOLVER_OUT_DIR", str(tmp_path / "o"))
     monkeypatch.setenv("BILI_COOKIES_BROWSER", "firefox")  # old key must be ignored
     s = Settings.load()
     assert s.cookies_browser == "chrome"
@@ -1192,17 +1192,17 @@ def test_load_reads_harvest_env_keys(monkeypatch, tmp_path):
 Run: `./.venv/Scripts/python.exe -m pytest tests/test_config.py -q`
 Expected: FAIL (`s.cookies_browser == "firefox"`, old key still read).
 
-- [ ] **Step 3: Edit `harvest/config.py` `Settings.load()`**
+- [ ] **Step 3: Edit `blisolver/config.py` `Settings.load()`**
 
 ```python
-cookies_browser=os.environ.get("HARVEST_COOKIES_BROWSER", cls.cookies_browser),
-cookies_profile=os.environ.get("HARVEST_COOKIES_PROFILE", ""),
+cookies_browser=os.environ.get("BLISOLVER_COOKIES_BROWSER", cls.cookies_browser),
+cookies_profile=os.environ.get("BLISOLVER_COOKIES_PROFILE", ""),
 ```
 ```python
-if os.environ.get("HARVEST_CACHE_DIR"):
-    s.cache_dir = Path(os.environ["HARVEST_CACHE_DIR"])
-if os.environ.get("HARVEST_OUT_DIR"):
-    s.out_dir = Path(os.environ["HARVEST_OUT_DIR"])
+if os.environ.get("BLISOLVER_CACHE_DIR"):
+    s.cache_dir = Path(os.environ["BLISOLVER_CACHE_DIR"])
+if os.environ.get("BLISOLVER_OUT_DIR"):
+    s.out_dir = Path(os.environ["BLISOLVER_OUT_DIR"])
 ```
 
 Leave `SESSDATA`, `LMSTUDIO_*`, and `REFERER = "https://www.bilibili.com"` unchanged.
@@ -1212,7 +1212,7 @@ Leave `SESSDATA`, `LMSTUDIO_*`, and `REFERER = "https://www.bilibili.com"` uncha
 Replace the whole file:
 
 ```dotenv
-# harvest configuration — copy to `.env` and fill in. NEVER commit the real `.env`.
+# blisolver configuration — copy to `.env` and fill in. NEVER commit the real `.env`.
 
 # --- Vision: LM Studio (OpenAI-compatible endpoint) ---
 LMSTUDIO_BASE_URL=http://localhost:1234/v1
@@ -1220,18 +1220,18 @@ LMSTUDIO_API_KEY=
 LMSTUDIO_VISION_MODEL=
 
 # --- bilibili auth (D9) ---
-# Default: yt-dlp reads cookies live from your logged-in browser (HARVEST_COOKIES_* below).
+# Default: yt-dlp reads cookies live from your logged-in browser (BLISOLVER_COOKIES_* below).
 # Fallback (headless / no browser): paste a SESSDATA cookie value here.
 # SESSDATA=
 
 # --- Cookies-from-browser (D9 default; also unlocks age-gated YouTube when set) ---
 # On Windows, Firefox is the reliable choice (Chromium browsers DPAPI-encrypt the cookie DB).
-HARVEST_COOKIES_BROWSER=firefox
-HARVEST_COOKIES_PROFILE=
+BLISOLVER_COOKIES_BROWSER=firefox
+BLISOLVER_COOKIES_PROFILE=
 
 # --- Optional overrides (otherwise sensible defaults in config.py) ---
-# HARVEST_CACHE_DIR=cache
-# HARVEST_OUT_DIR=out
+# BLISOLVER_CACHE_DIR=cache
+# BLISOLVER_OUT_DIR=out
 # FFMPEG_PATH=
 ```
 
@@ -1239,13 +1239,13 @@ HARVEST_COOKIES_PROFILE=
 
 Run: `./.venv/Scripts/python.exe -m pytest tests/test_config.py -q`
 Expected: PASS. Then full suite -> PASS.
-Run: `grep -rn "BILI_" harvest/ .env.example` — expected: no output.
+Run: `grep -rn "BILI_" blisolver/ .env.example` — expected: no output.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add -A
-git commit -m "refactor: rename env prefix BILI_* -> HARVEST_*
+git commit -m "refactor: rename env prefix BILI_* -> BLISOLVER_*
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 ```
@@ -1257,26 +1257,26 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 Wire the provider seam into `cli.py` and `probe.py`: dispatch by `select_provider(url)`, add `--lang`, and route BOTH sources through the provider's `fetch_subtitle` (which returns a `SubtitleOutcome` — YouTube's exact-key rule, bilibili's gate/#6357 now live inside their providers), so `decide_transcript` is fully platform-agnostic. Generalize `probe`/`build_bundle` to consume `SourceMetadata`.
 
 **Files:**
-- Modify: `harvest/__init__.py` (import providers so they register)
-- Modify: `harvest/probe.py`
-- Modify: `harvest/cli.py`
-- Modify: `harvest/merge.py` (`build_bundle` consumes `SourceMetadata`)
+- Modify: `blisolver/__init__.py` (import providers so they register)
+- Modify: `blisolver/probe.py`
+- Modify: `blisolver/cli.py`
+- Modify: `blisolver/merge.py` (`build_bundle` consumes `SourceMetadata`)
 - Test: `tests/test_probe.py`, `tests/test_cli.py`, `tests/test_merge.py`
 
 **Interfaces:**
-- Consumes: `select_provider` from `harvest.providers.base`; provider `fetch_metadata`/`fetch_subtitle`; `SourceMetadata`; `transcribe(..., lang=...)` (Task 7).
-- Produces: `harvest probe <url>` works for youtube.com; `harvest ingest <url> --lang CODE` works; `decide_transcript(canonical, meta, settings, args)`; `build_bundle(canonical, meta, transcript, frames, settings, *, vision_model=None)`.
+- Consumes: `select_provider` from `blisolver.providers.base`; provider `fetch_metadata`/`fetch_subtitle`; `SourceMetadata`; `transcribe(..., lang=...)` (Task 7).
+- Produces: `blisolver probe <url>` works for youtube.com; `blisolver ingest <url> --lang CODE` works; `decide_transcript(canonical, meta, settings, args)`; `build_bundle(canonical, meta, transcript, frames, settings, *, vision_model=None)`.
 
 - [ ] **Step 1: Ensure providers register on import**
 
-In `harvest/__init__.py`, after the existing imports add (registration side effect):
+In `blisolver/__init__.py`, after the existing imports add (registration side effect):
 
 ```python
 from .providers import bilibili as _bilibili  # noqa: F401,E402  (registers BilibiliProvider)
 from .providers import youtube as _youtube    # noqa: F401,E402  (registers YouTubeProvider)
 ```
 
-Add both to nothing else; they exist purely for the `register()` side effect so `select_provider` sees them whenever `harvest` is imported.
+Add both to nothing else; they exist purely for the `register()` side effect so `select_provider` sees them whenever `blisolver` is imported.
 
 - [ ] **Step 2: Write failing probe test (YouTube path via provider)**
 
@@ -1284,9 +1284,9 @@ Add to `tests/test_probe.py`:
 
 ```python
 def test_probe_youtube_delegates_to_provider(monkeypatch):
-    from harvest import probe as probe_mod
-    from harvest.providers.base import Canonical, SourceMetadata
-    from harvest.schema import ProbeResult
+    from blisolver import probe as probe_mod
+    from blisolver.providers.base import Canonical, SourceMetadata
+    from blisolver.schema import ProbeResult
 
     canonical = Canonical("youtube.com", "dQw4w9WgXcQ", 1, "https://youtu.be/dQw4w9WgXcQ")
 
@@ -1305,7 +1305,7 @@ def test_probe_youtube_delegates_to_provider(monkeypatch):
     assert result.published_at.endswith("Z")
 ```
 
-- [ ] **Step 3: Rewrite `harvest/probe.py`**
+- [ ] **Step 3: Rewrite `blisolver/probe.py`**
 
 ```python
 """Public pre-flight metadata probe. Delegates to the URL-selected provider's fetch_metadata
@@ -1380,7 +1380,7 @@ def test_ingest_lang_defaults_to_none():
 Run: `./.venv/Scripts/python.exe -m pytest tests/test_cli.py -k lang -q`
 Expected: FAIL (`Namespace has no attribute 'lang'`).
 
-In `harvest/cli.py` `parse_args`, add to the `ingest` subparser:
+In `blisolver/cli.py` `parse_args`, add to the `ingest` subparser:
 
 ```python
 ingest.add_argument(
@@ -1395,9 +1395,9 @@ Add to `tests/test_cli.py`:
 
 ```python
 def test_decide_transcript_youtube_reuses_human_sub_no_quality_gate(monkeypatch):
-    from harvest import cli
-    from harvest.providers.base import Canonical, SourceMetadata, SubtitleOutcome
-    from harvest.schema import Segment
+    from blisolver import cli
+    from blisolver.providers.base import Canonical, SourceMetadata, SubtitleOutcome
+    from blisolver.schema import Segment
 
     canonical = Canonical("youtube.com", "dQw4w9WgXcQ", 1, "https://youtu.be/dQw4w9WgXcQ")
     meta = SourceMetadata(platform="youtube.com", id="dQw4w9WgXcQ", title="T", uploader="C",
@@ -1422,8 +1422,8 @@ def test_decide_transcript_youtube_reuses_human_sub_no_quality_gate(monkeypatch)
 
 
 def test_decide_transcript_youtube_falls_back_to_whisper(monkeypatch):
-    from harvest import cli
-    from harvest.providers.base import Canonical, SourceMetadata
+    from blisolver import cli
+    from blisolver.providers.base import Canonical, SourceMetadata
 
     canonical = Canonical("youtube.com", "x", 1, "https://youtu.be/x")
     meta = SourceMetadata(platform="youtube.com", id="x", title=None, uploader=None,
@@ -1438,7 +1438,7 @@ def test_decide_transcript_youtube_falls_back_to_whisper(monkeypatch):
     captured = {}
 
     def fake_whisper(canonical, settings, args, *, reason, gate=None, lang=None):
-        from harvest.schema import Transcript
+        from blisolver.schema import Transcript
         captured["lang"] = lang
         return Transcript(source="whisper", source_reason=reason, language=lang, segments=[])
 
@@ -1451,9 +1451,9 @@ def test_decide_transcript_youtube_falls_back_to_whisper(monkeypatch):
 
 def test_decide_transcript_bilibili_accepted_outcome_keeps_gate(monkeypatch):
     # Agnostic path: provider returns an accepted outcome (gate passed) -> Transcript mirrors it.
-    from harvest import cli
-    from harvest.providers.base import Canonical, SourceMetadata, SubtitleOutcome
-    from harvest.schema import QualityGate, Segment
+    from blisolver import cli
+    from blisolver.providers.base import Canonical, SourceMetadata, SubtitleOutcome
+    from blisolver.schema import QualityGate, Segment
 
     canonical = Canonical("bilibili.com", "BV1", 1, "https://www.bilibili.com/video/BV1")
     meta = SourceMetadata(platform="bilibili.com", id="BV1", title="T", uploader="U",
@@ -1475,9 +1475,9 @@ def test_decide_transcript_bilibili_accepted_outcome_keeps_gate(monkeypatch):
 
 def test_decide_transcript_rejected_outcome_falls_back_to_whisper_with_gate(monkeypatch):
     # accepted=False must carry source_reason + failed gate into the Whisper transcript.
-    from harvest import cli
-    from harvest.providers.base import Canonical, SourceMetadata, SubtitleOutcome
-    from harvest.schema import QualityGate
+    from blisolver import cli
+    from blisolver.providers.base import Canonical, SourceMetadata, SubtitleOutcome
+    from blisolver.schema import QualityGate
 
     canonical = Canonical("bilibili.com", "BV1", 1, "https://www.bilibili.com/video/BV1")
     meta = SourceMetadata(platform="bilibili.com", id="BV1", title="T", uploader="U",
@@ -1495,7 +1495,7 @@ def test_decide_transcript_rejected_outcome_falls_back_to_whisper_with_gate(monk
     captured = {}
 
     def fake_whisper(canonical, settings, args, *, reason, gate=None, lang=None):
-        from harvest.schema import Transcript
+        from blisolver.schema import Transcript
         captured.update(reason=reason, gate=gate, lang=lang)
         return Transcript(source="whisper", source_reason=reason, language=lang,
                           quality_gate=gate, segments=[])
@@ -1547,7 +1547,7 @@ Expected: PASS.
 
 - [ ] **Step 9: Update `build_bundle` to consume `SourceMetadata`**
 
-In `harvest/merge.py`:
+In `blisolver/merge.py`:
 
 ```python
 def build_bundle(canonical, meta, transcript, frames, settings, *, vision_model=None):
@@ -1564,7 +1564,7 @@ def build_bundle(canonical, meta, transcript, frames, settings, *, vision_model=
     )
 ```
 
-Remove the now-unused `from .player_api import ViewData, published_at_iso` import from `merge.py`. Update `tests/test_merge.py` `build_bundle` tests to pass a `SourceMetadata` (from `harvest.providers.base`) instead of `info=`/`view=`; assert `bundle.uploader_id` and `bundle.published_at` come from `meta`.
+Remove the now-unused `from .player_api import ViewData, published_at_iso` import from `merge.py`. Update `tests/test_merge.py` `build_bundle` tests to pass a `SourceMetadata` (from `blisolver.providers.base`) instead of `info=`/`view=`; assert `bundle.uploader_id` and `bundle.published_at` come from `meta`.
 
 - [ ] **Step 10: Rewrite `process_part` and part-enumeration in `cli.py`**
 
@@ -1617,9 +1617,9 @@ Update `tests/test_cli.py`:
 
 ```python
 def test_process_part_fetches_metadata_once_and_shares_it(monkeypatch):
-    from harvest import cli
-    from harvest.providers.base import Canonical, SourceMetadata
-    from harvest.schema import Bundle, Meta, Transcript
+    from blisolver import cli
+    from blisolver.providers.base import Canonical, SourceMetadata
+    from blisolver.schema import Bundle, Meta, Transcript
 
     canonical = Canonical("youtube.com", "x", 1, "https://youtu.be/x")
     meta = SourceMetadata(platform="youtube.com", id="x", title="t", uploader=None,
@@ -1702,9 +1702,9 @@ markers = ["live: hits the network against a real public video (opt in with -m l
 ```python
 import pytest
 
-from harvest.config import Settings
-from harvest.providers.base import SourceMetadata
-from harvest.providers.youtube import YouTubeProvider
+from blisolver.config import Settings
+from blisolver.providers.base import SourceMetadata
+from blisolver.providers.youtube import YouTubeProvider
 
 # Big Buck Bunny — stable, public, license-clean; the drift canary.
 _LIVE_URL = "https://www.youtube.com/watch?v=aqz-KE-bpKQ"

@@ -1,8 +1,8 @@
 import pytest
 
-from harvest.config import Settings
-from harvest.providers.base import SourceMetadata
-from harvest.providers.youtube import YouTubeProvider
+from blisolver.config import Settings
+from blisolver.providers.base import SourceMetadata
+from blisolver.providers.youtube import YouTubeProvider
 
 # Big Buck Bunny — stable, public, license-clean; the drift canary.
 _LIVE_URL = "https://www.youtube.com/watch?v=aqz-KE-bpKQ"

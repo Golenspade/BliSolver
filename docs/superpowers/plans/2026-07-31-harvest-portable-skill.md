@@ -1,22 +1,22 @@
-# Harvest Portable Skill Implementation Plan
+# BliSolver Portable Skill Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the approved portable `harvest-video-ingestion` Agent Skill with concise instructions, current-contract references, safe runtime wrappers, and local bundle inspection/validation tools.
+**Goal:** Build the approved portable `blisolver-video-ingestion` Agent Skill with concise instructions, current-contract references, safe runtime wrappers, and local bundle inspection/validation tools.
 
 **Status:** Implemented and verified.
 
-**Architecture:** Create the publishable artifact under `skill/harvest-video-ingestion/`. `SKILL.md` contains only trigger guidance and the shortest safe operating workflow; detailed current facts live in directly linked `references/` files. `scripts/` contains thin Python wrappers that discover either a BliSolver checkout or an installed `harvest` command, plus local-only bundle utilities; it does not vendor the application.
+**Architecture:** Create the publishable artifact under `skill/blisolver-video-ingestion/`. `SKILL.md` contains only trigger guidance and the shortest safe operating workflow; detailed current facts live in directly linked `references/` files. `scripts/` contains thin Python wrappers that discover either a BliSolver checkout or an installed `blisolver` command, plus local-only bundle utilities; it does not vendor the application.
 
-**Tech Stack:** Agent Skills `SKILL.md` format, Python 3.11+ standard library for wrappers, current BliSolver `harvest` CLI/schema for delegation and validation, pytest subprocess/unit tests, `skills-ref validate` when available.
+**Tech Stack:** Agent Skills `SKILL.md` format, Python 3.11+ standard library for wrappers, current BliSolver `blisolver` CLI/schema for delegation and validation, pytest subprocess/unit tests, `skills-ref validate` when available.
 
 ## Global Constraints
 
-- Published skill name is exactly `harvest-video-ingestion`; the directory and `SKILL.md` frontmatter name must match.
+- Published skill name is exactly `blisolver-video-ingestion`; the directory and `SKILL.md` frontmatter name must match.
 - Current bundle schema is exactly `1.1`; `Segment.source`/`confidence` and `Bundle.ocr` must be documented and validated.
 - Supported operational platforms are `bilibili.com` and YouTube; `bilibili.tv` is deferred and must remain an explicit failure.
 - The current transcription backend is `whisper-cli`/whisper.cpp; do not describe faster-whisper/CUDA as the current implementation where source code disagrees.
-- No skill script may vendor or modify `harvest/`, `.venv/`, `.ocr-venv/`, `cache/`, `out/`, models, browser profiles, cookies, `.env`, or the pre-existing untracked `scripts/download_video.py`.
+- No skill script may vendor or modify `blisolver/`, `.venv/`, `.ocr-venv/`, `cache/`, `out/`, models, browser profiles, cookies, `.env`, or the pre-existing untracked `scripts/download_video.py`.
 - No script may use `shell=True`, print secret values, or perform network calls from `doctor.py`, `inspect_bundle.py`, or `validate_bundle.py`.
 - `probe.py` must keep successful stdout as one JSON object and send diagnostics to stderr; `validate_bundle.py` exits 0 valid, 1 invalid, 2 usage/runtime failure.
 - Existing tests must remain green; the baseline is `343 passed, 4 deselected`, before adding skill tests.
@@ -27,21 +27,21 @@
 
 Create the following files:
 
-- `skill/harvest-video-ingestion/SKILL.md` — portable skill manifest, trigger rules, decision tree, command table, and reference-loading map.
-- `skill/harvest-video-ingestion/LICENSE.txt` — exact MIT license text copied from the repository `LICENSE`.
-- `skill/harvest-video-ingestion/references/architecture.md` — current component map and URL-to-bundle flow.
-- `skill/harvest-video-ingestion/references/current-contract.md` — CLI, schema 1.1, output layout, provenance, and optional-track contract.
-- `skill/harvest-video-ingestion/references/provider-guide.md` — provider selection, bilibili/YouTube differences, auth, subtitle tiers, and deferred `.tv` behavior.
-- `skill/harvest-video-ingestion/references/pipeline-stages.md` — cache keys, whisper.cpp, frames, vision/projector check, OCR isolate, fusion, danmaku, interactions, and MCP.
-- `skill/harvest-video-ingestion/references/operational-runbook.md` — setup, preflight, safe invocations, failure recovery, and validation.
-- `skill/harvest-video-ingestion/references/domain-glossary.md` — Atlas/harvest terms and authority rules.
-- `skill/harvest-video-ingestion/references/source-map.md` — map each operational claim to current source/test files and mark historical docs.
-- `skill/harvest-video-ingestion/scripts/_common.py` — runtime discovery and subprocess helpers shared by wrappers.
-- `skill/harvest-video-ingestion/scripts/doctor.py` — no-network dependency/configuration report.
-- `skill/harvest-video-ingestion/scripts/probe.py` — JSON-safe `harvest probe` adapter.
-- `skill/harvest-video-ingestion/scripts/ingest.py` — explicit current-flag `harvest ingest` adapter and dry-run mode.
-- `skill/harvest-video-ingestion/scripts/inspect_bundle.py` — local compact bundle summary.
-- `skill/harvest-video-ingestion/scripts/validate_bundle.py` — schema/path/artifact validator.
+- `skill/blisolver-video-ingestion/SKILL.md` — portable skill manifest, trigger rules, decision tree, command table, and reference-loading map.
+- `skill/blisolver-video-ingestion/LICENSE.txt` — exact MIT license text copied from the repository `LICENSE`.
+- `skill/blisolver-video-ingestion/references/architecture.md` — current component map and URL-to-bundle flow.
+- `skill/blisolver-video-ingestion/references/current-contract.md` — CLI, schema 1.1, output layout, provenance, and optional-track contract.
+- `skill/blisolver-video-ingestion/references/provider-guide.md` — provider selection, bilibili/YouTube differences, auth, subtitle tiers, and deferred `.tv` behavior.
+- `skill/blisolver-video-ingestion/references/pipeline-stages.md` — cache keys, whisper.cpp, frames, vision/projector check, OCR isolate, fusion, danmaku, interactions, and MCP.
+- `skill/blisolver-video-ingestion/references/operational-runbook.md` — setup, preflight, safe invocations, failure recovery, and validation.
+- `skill/blisolver-video-ingestion/references/domain-glossary.md` — Atlas/blisolver terms and authority rules.
+- `skill/blisolver-video-ingestion/references/source-map.md` — map each operational claim to current source/test files and mark historical docs.
+- `skill/blisolver-video-ingestion/scripts/_common.py` — runtime discovery and subprocess helpers shared by wrappers.
+- `skill/blisolver-video-ingestion/scripts/doctor.py` — no-network dependency/configuration report.
+- `skill/blisolver-video-ingestion/scripts/probe.py` — JSON-safe `blisolver probe` adapter.
+- `skill/blisolver-video-ingestion/scripts/ingest.py` — explicit current-flag `blisolver ingest` adapter and dry-run mode.
+- `skill/blisolver-video-ingestion/scripts/inspect_bundle.py` — local compact bundle summary.
+- `skill/blisolver-video-ingestion/scripts/validate_bundle.py` — schema/path/artifact validator.
 - `tests/test_portable_skill.py` — deterministic tests for package shape and every wrapper behavior.
 
 Do not modify existing application files unless a test exposes an unavoidable compatibility defect in the wrapper boundary.
@@ -52,7 +52,7 @@ Do not modify existing application files unless a test exposes an unavoidable co
 
 **Files:**
 - Create: `tests/test_portable_skill.py`
-- Read-only fixtures: `harvest/schema.py`, `pyproject.toml`, `LICENSE`
+- Read-only fixtures: `blisolver/schema.py`, `pyproject.toml`, `LICENSE`
 
 **Interfaces:**
 - Tests invoke scripts as real subprocesses through `sys.executable`, so the package must work when copied outside the checkout.
@@ -73,7 +73,7 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-SKILL = REPO / "skill" / "harvest-video-ingestion"
+SKILL = REPO / "skill" / "blisolver-video-ingestion"
 SCRIPTS = SKILL / "scripts"
 
 
@@ -126,7 +126,7 @@ def write_bundle(
 
 def test_manifest_lists_valid_skill_files():
     text = (SKILL / "SKILL.md").read_text(encoding="utf-8")
-    assert "name: harvest-video-ingestion" in text
+    assert "name: blisolver-video-ingestion" in text
     assert "references/current-contract.md" in text
     assert "scripts/validate_bundle.py" in text
     for path in [
@@ -162,13 +162,13 @@ def test_ingest_dry_run_forwards_current_flags(tmp_path):
     payload = json.loads(result.stdout)
     assert payload["cwd"] == str(REPO)
     assert payload["command"][-2:] == ["--ocr", "--force-ocr"]
-    assert payload["command"][0:3] == [sys.executable, "-m", "harvest.cli"]
+    assert payload["command"][0:3] == [sys.executable, "-m", "blisolver.cli"]
     assert "--force-whisper" in payload["command"]
     assert "--no-frame-images" in payload["command"]
 
 
 def test_probe_keeps_child_json_on_stdout(tmp_path):
-    fake = tmp_path / "harvest"
+    fake = tmp_path / "blisolver"
     fake.write_text(
         "#!/usr/bin/env python3\n"
         "import json, sys\n"
@@ -177,7 +177,7 @@ def test_probe_keeps_child_json_on_stdout(tmp_path):
         encoding="utf-8",
     )
     fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
-    env = {"PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}", "HARVEST_PROJECT_ROOT": ""}
+    env = {"PATH": f"{tmp_path}{os.pathsep}{os.environ['PATH']}", "BLISOLVER_PROJECT_ROOT": ""}
     result = run_script("probe.py", "https://example.invalid/video", cwd=tmp_path, env=env)
     assert result.returncode == 0
     assert json.loads(result.stdout) == {"schema_version": "1.1", "id": "fixture"}
@@ -233,7 +233,7 @@ Run:
 ./.venv/bin/python -m pytest -q tests/test_portable_skill.py
 ```
 
-Expected: collection or assertion failures because `skill/harvest-video-ingestion/` and its scripts do not yet exist. Do not weaken the tests to make this first run pass.
+Expected: collection or assertion failures because `skill/blisolver-video-ingestion/` and its scripts do not yet exist. Do not weaken the tests to make this first run pass.
 
 - [ ] **Step 3: Confirm the baseline suite is otherwise unchanged**
 
@@ -250,8 +250,8 @@ Expected: the pre-existing suite remains green apart from the new intentionally 
 ### Task 2: Implement runtime discovery and the dependency doctor
 
 **Files:**
-- Create: `skill/harvest-video-ingestion/scripts/_common.py`
-- Create: `skill/harvest-video-ingestion/scripts/doctor.py`
+- Create: `skill/blisolver-video-ingestion/scripts/_common.py`
+- Create: `skill/blisolver-video-ingestion/scripts/doctor.py`
 - Test: `tests/test_portable_skill.py::test_doctor_json_never_contains_secret_values`
 
 **Interfaces:**
@@ -277,13 +277,13 @@ def resolve_project_root(explicit: str | None = None) -> Path | None:
     candidates: list[Path] = []
     if explicit:
         candidates.append(Path(explicit).expanduser())
-    if os.environ.get("HARVEST_PROJECT_ROOT"):
-        candidates.append(Path(os.environ["HARVEST_PROJECT_ROOT"]).expanduser())
+    if os.environ.get("BLISOLVER_PROJECT_ROOT"):
+        candidates.append(Path(os.environ["BLISOLVER_PROJECT_ROOT"]).expanduser())
     here = Path.cwd().resolve()
     candidates.extend([here, *here.parents])
     for candidate in candidates:
         candidate = candidate.resolve()
-        if (candidate / "harvest" / "__init__.py").is_file() and (candidate / "pyproject.toml").is_file():
+        if (candidate / "blisolver" / "__init__.py").is_file() and (candidate / "pyproject.toml").is_file():
             return candidate
     return None
 
@@ -294,16 +294,16 @@ def resolve_runtime(explicit: str | None = None) -> Runtime:
     if root:
         old = env.get("PYTHONPATH")
         env["PYTHONPATH"] = str(root) if not old else os.pathsep.join((str(root), old))
-        return Runtime((sys.executable, "-m", "harvest.cli"), root, env, "checkout")
-    executable = shutil.which("harvest")
+        return Runtime((sys.executable, "-m", "blisolver.cli"), root, env, "checkout")
+    executable = shutil.which("blisolver")
     if executable:
         return Runtime((executable,), None, env, "installed")
-    raise RuntimeError("could not find a BliSolver checkout or an installed harvest command")
+    raise RuntimeError("could not find a BliSolver checkout or an installed blisolver command")
 ```
 
 - [ ] **Step 2: Implement doctor checks without importing secrets or making HTTP calls**
 
-Check exactly these names: `python`, `harvest`, `ffmpeg`, `javascript-runtime`, `whisper-cli`, `vision-config`, `ocr-isolate`, and `provider-auth`. Use `shutil.which` and environment-variable presence only. Never include values of `SESSDATA`, `LMSTUDIO_API_KEY`, `HARVEST_*_PROFILE`, or any token in a detail string. Treat Python/harvest as errors, and stage-specific missing tools/configuration as warnings. `--json` prints one compact JSON object; the non-JSON mode prints one human line per check.
+Check exactly these names: `python`, `blisolver`, `ffmpeg`, `javascript-runtime`, `whisper-cli`, `vision-config`, `ocr-isolate`, and `provider-auth`. Use `shutil.which` and environment-variable presence only. Never include values of `SESSDATA`, `LMSTUDIO_API_KEY`, `BLISOLVER_*_PROFILE`, or any token in a detail string. Treat Python/blisolver as errors, and stage-specific missing tools/configuration as warnings. `--json` prints one compact JSON object; the non-JSON mode prints one human line per check.
 
 - [ ] **Step 3: Run the focused doctor test**
 
@@ -320,8 +320,8 @@ Expected: PASS, with no secret literal in stdout or stderr.
 ### Task 3: Implement probe and ingest adapters
 
 **Files:**
-- Create: `skill/harvest-video-ingestion/scripts/probe.py`
-- Create: `skill/harvest-video-ingestion/scripts/ingest.py`
+- Create: `skill/blisolver-video-ingestion/scripts/probe.py`
+- Create: `skill/blisolver-video-ingestion/scripts/ingest.py`
 - Test: `tests/test_portable_skill.py::test_probe_keeps_child_json_on_stdout`
 - Test: `tests/test_portable_skill.py::test_ingest_dry_run_forwards_current_flags`
 
@@ -332,7 +332,7 @@ Expected: PASS, with no secret literal in stdout or stderr.
 
 - [ ] **Step 1: Implement `probe.py` JSON discipline**
 
-Capture the child process with `text=True`. On success, parse `stdout` with `json.loads`; if parsing fails, write `error: harvest probe returned non-JSON stdout` and the bounded child output to stderr and return 1. On child failure, forward child stderr and return its nonzero code. On success, print `json.dumps(payload, ensure_ascii=False, separators=(",", ":"))` and forward child stderr unchanged.
+Capture the child process with `text=True`. On success, parse `stdout` with `json.loads`; if parsing fails, write `error: blisolver probe returned non-JSON stdout` and the bounded child output to stderr and return 1. On child failure, forward child stderr and return its nonzero code. On success, print `json.dumps(payload, ensure_ascii=False, separators=(",", ":"))` and forward child stderr unchanged.
 
 - [ ] **Step 2: Implement explicit ingest flag forwarding**
 
@@ -357,15 +357,15 @@ Run:
   tests/test_portable_skill.py::test_ingest_dry_run_forwards_current_flags
 ```
 
-Expected: PASS. The probe test must execute only its temporary fake `harvest` executable; it must not contact a real provider.
+Expected: PASS. The probe test must execute only its temporary fake `blisolver` executable; it must not contact a real provider.
 
 ---
 
 ### Task 4: Implement local bundle inspection and validation
 
 **Files:**
-- Create: `skill/harvest-video-ingestion/scripts/inspect_bundle.py`
-- Create: `skill/harvest-video-ingestion/scripts/validate_bundle.py`
+- Create: `skill/blisolver-video-ingestion/scripts/inspect_bundle.py`
+- Create: `skill/blisolver-video-ingestion/scripts/validate_bundle.py`
 - Test: `tests/test_portable_skill.py::test_inspect_bundle_returns_compact_counts`
 - Test: `tests/test_portable_skill.py::test_validate_bundle_accepts_and_rejects_artifacts`
 
@@ -392,7 +392,7 @@ When checking a frame path, resolve it relative to the bundle directory and coun
 
 - [ ] **Step 3: Implement current-schema validation**
 
-With `--project-root`, prepend the checkout to `sys.path` and import `harvest.schema.Bundle` and `SCHEMA_VERSION`. Validate the parsed object through `Bundle.model_validate`. Add explicit errors when:
+With `--project-root`, prepend the checkout to `sys.path` and import `blisolver.schema.Bundle` and `SCHEMA_VERSION`. Validate the parsed object through `Bundle.model_validate`. Add explicit errors when:
 
 1. `schema_version != SCHEMA_VERSION` (currently `1.1`);
 2. `bundle.md` is missing;
@@ -417,19 +417,19 @@ Expected: PASS for the valid temporary bundle and exit 1 with a `missing` error 
 ### Task 5: Write the portable skill manifest and reference set
 
 **Files:**
-- Create: `skill/harvest-video-ingestion/SKILL.md`
-- Create: `skill/harvest-video-ingestion/LICENSE.txt`
-- Create: `skill/harvest-video-ingestion/references/architecture.md`
-- Create: `skill/harvest-video-ingestion/references/current-contract.md`
-- Create: `skill/harvest-video-ingestion/references/provider-guide.md`
-- Create: `skill/harvest-video-ingestion/references/pipeline-stages.md`
-- Create: `skill/harvest-video-ingestion/references/operational-runbook.md`
-- Create: `skill/harvest-video-ingestion/references/domain-glossary.md`
-- Create: `skill/harvest-video-ingestion/references/source-map.md`
+- Create: `skill/blisolver-video-ingestion/SKILL.md`
+- Create: `skill/blisolver-video-ingestion/LICENSE.txt`
+- Create: `skill/blisolver-video-ingestion/references/architecture.md`
+- Create: `skill/blisolver-video-ingestion/references/current-contract.md`
+- Create: `skill/blisolver-video-ingestion/references/provider-guide.md`
+- Create: `skill/blisolver-video-ingestion/references/pipeline-stages.md`
+- Create: `skill/blisolver-video-ingestion/references/operational-runbook.md`
+- Create: `skill/blisolver-video-ingestion/references/domain-glossary.md`
+- Create: `skill/blisolver-video-ingestion/references/source-map.md`
 - Test: `tests/test_portable_skill.py::test_manifest_lists_valid_skill_files`
 
 **Interfaces:**
-- `SKILL.md` frontmatter must contain exactly `name: harvest-video-ingestion`, a trigger-oriented `description`, `license: MIT`, a compatibility statement, and string metadata for project/schema/platforms.
+- `SKILL.md` frontmatter must contain exactly `name: blisolver-video-ingestion`, a trigger-oriented `description`, `license: MIT`, a compatibility statement, and string metadata for project/schema/platforms.
 - All reference links are relative and directly linked from `SKILL.md`; no reference requires a second undocumented hop.
 
 - [ ] **Step 1: Write the manifest frontmatter and concise operating body**
@@ -438,10 +438,10 @@ Use this frontmatter:
 
 ```yaml
 ---
-name: harvest-video-ingestion
-description: Operate the BliSolver harvest pipeline for bilibili.com and YouTube videos, diagnose its runtime, run probe or ingest, and inspect or validate Atlas bundle outputs. Use when an Agent needs video acquisition, caption-versus-Whisper decisions, frame/vision/OCR processing, danmaku or interaction provenance, provider troubleshooting, or schema-1.1 bundle handling; do not use it for downstream summarization or entity extraction.
+name: blisolver-video-ingestion
+description: Operate the BliSolver blisolver pipeline for bilibili.com and YouTube videos, diagnose its runtime, run probe or ingest, and inspect or validate Atlas bundle outputs. Use when an Agent needs video acquisition, caption-versus-Whisper decisions, frame/vision/OCR processing, danmaku or interaction provenance, provider troubleshooting, or schema-1.1 bundle handling; do not use it for downstream summarization or entity extraction.
 license: MIT
-compatibility: Requires Python 3.11+ and either a BliSolver checkout or an installed harvest command; media stages additionally require their documented external tools and services.
+compatibility: Requires Python 3.11+ and either a BliSolver checkout or an installed blisolver command; media stages additionally require their documented external tools and services.
 metadata:
   project: BliSolver
   bundle-schema: "1.1"
@@ -455,7 +455,7 @@ The body must include: the current-truth precedence rule; the URL → provider �
 
 Use these required headings:
 
-- `architecture.md`: “Purpose”, “Current module map”, “Execution flow”, “MCP boundary”, “What is not harvest’s job”.
+- `architecture.md`: “Purpose”, “Current module map”, “Execution flow”, “MCP boundary”, “What is not blisolver’s job”.
 - `current-contract.md`: “CLI verbs”, “Bundle schema 1.1”, “Transcript provenance”, “Optional tracks”, “Output layout”, “Stable versus volatile fields”.
 - `provider-guide.md`: “Provider selection”, “bilibili.com”, “YouTube”, “Subtitle decision”, “Authentication”, “Deferred bilibili.tv”.
 - `pipeline-stages.md`: “Cache identity”, “Audio and whisper.cpp”, “Frames and phash”, “Vision projector check”, “Hard-subtitle OCR”, “Fusion”, “Danmaku”, “Interactions”.
@@ -463,20 +463,20 @@ Use these required headings:
 - `domain-glossary.md`: “Atlas”, “bundle.md”, “bundle.json”, “human-sub/auto-sub/whisper”, “soft subtitles/hardsubs”, “danmaku/interactions”, “authority”.
 - `source-map.md`: “Canonical current sources”, “Tests as executable truth”, “Historical documents”, “Known stale statements”.
 
-Each reference must distinguish current implementation from historical plans. Specifically mention `harvest/transcribe.py`’s `whisper-cli` backend, schema 1.1, optional OCR, `harvest mcp`, and the `.tv` guard.
+Each reference must distinguish current implementation from historical plans. Specifically mention `blisolver/transcribe.py`’s `whisper-cli` backend, schema 1.1, optional OCR, `blisolver mcp`, and the `.tv` guard.
 
 - [ ] **Step 3: Copy the license without modification**
 
 Run:
 
 ```bash
-cp LICENSE skill/harvest-video-ingestion/LICENSE.txt
+cp LICENSE skill/blisolver-video-ingestion/LICENSE.txt
 ```
 
 Then verify the files are byte-identical:
 
 ```bash
-cmp LICENSE skill/harvest-video-ingestion/LICENSE.txt
+cmp LICENSE skill/blisolver-video-ingestion/LICENSE.txt
 ```
 
 - [ ] **Step 4: Run the manifest test**
@@ -494,12 +494,12 @@ Expected: PASS, with every reference path present.
 ### Task 6: Validate, review, and document the finished artifact
 
 **Files:**
-- Modify only if validation exposes a concrete documentation or wrapper defect: files under `skill/harvest-video-ingestion/` or `tests/test_portable_skill.py`.
+- Modify only if validation exposes a concrete documentation or wrapper defect: files under `skill/blisolver-video-ingestion/` or `tests/test_portable_skill.py`.
 - Do not stage or modify: `scripts/download_video.py`.
 
 **Interfaces:**
 - All five user-facing scripts respond to `--help`.
-- The artifact can be copied as a directory to `.agents/skills/harvest-video-ingestion/` without changing its internal relative links.
+- The artifact can be copied as a directory to `.agents/skills/blisolver-video-ingestion/` without changing its internal relative links.
 
 - [ ] **Step 1: Run the complete skill test file**
 
@@ -526,7 +526,7 @@ Expected: all existing tests plus the new skill tests pass; no live tests run by
 If available, run:
 
 ```bash
-skills-ref validate skill/harvest-video-ingestion
+skills-ref validate skill/blisolver-video-ingestion
 ```
 
 Expected: no validation errors. If `skills-ref` is unavailable, record that limitation and still run the manifest/link checks and all script tests.
@@ -537,13 +537,13 @@ Run:
 
 ```bash
 for script in doctor.py probe.py ingest.py inspect_bundle.py validate_bundle.py; do
-  ./.venv/bin/python skill/harvest-video-ingestion/scripts/$script --help >/dev/null
+  ./.venv/bin/python skill/blisolver-video-ingestion/scripts/$script --help >/dev/null
  done
-./.venv/bin/python skill/harvest-video-ingestion/scripts/doctor.py --project-root . --json
-./.venv/bin/python skill/harvest-video-ingestion/scripts/ingest.py \
+./.venv/bin/python skill/blisolver-video-ingestion/scripts/doctor.py --project-root . --json
+./.venv/bin/python skill/blisolver-video-ingestion/scripts/ingest.py \
   https://example.invalid/video --project-root . --dry-run --no-vision
-./.venv/bin/python skill/harvest-video-ingestion/scripts/inspect_bundle.py out/BV111o6BAEg4-p1
-./.venv/bin/python skill/harvest-video-ingestion/scripts/validate_bundle.py \
+./.venv/bin/python skill/blisolver-video-ingestion/scripts/inspect_bundle.py out/BV111o6BAEg4-p1
+./.venv/bin/python skill/blisolver-video-ingestion/scripts/validate_bundle.py \
   out/BV111o6BAEg4-p1 --project-root .
 ```
 
@@ -557,7 +557,7 @@ Run:
 git diff --check
 git status --short
 git diff --stat
-git diff -- skill/harvest-video-ingestion tests/test_portable_skill.py
+git diff -- skill/blisolver-video-ingestion tests/test_portable_skill.py
 ```
 
 Expected: only the new skill, its tests, and the two approved design/plan documents appear; the pre-existing `?? scripts/download_video.py` remains unmodified and unstaged.

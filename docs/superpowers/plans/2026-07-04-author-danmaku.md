@@ -4,13 +4,13 @@
 
 **Goal:** Flag each danmaku posted by a video author — the primary uploader (UP主) or a 合作 collaborator — as an elevated, higher-authority line, and realign `bundle.md` danmaku rendering to a single chronological pass with elevation pills (fixing a `high_like` ordering drift in the same stroke).
 
-**Architecture:** The census stream harvest already pages under `--danmaku` carries a per-elem `midHash` (protobuf field 6, a crc32 of the poster's mid); the `view` response already carries the video's author mids (`owner.mid` + `staff[].mid`). We read `midHash` in the decoder, resolve it to an `author` role by crc32-matching against the author mids at fetch time (zero new network calls), carry `author` through the representation stage as an *elevated* signal alongside `high_like` (extracted verbatim before LLM clustering), and render every elevated line in place — never dropped, never reordered out of content-time.
+**Architecture:** The census stream blisolver already pages under `--danmaku` carries a per-elem `midHash` (protobuf field 6, a crc32 of the poster's mid); the `view` response already carries the video's author mids (`owner.mid` + `staff[].mid`). We read `midHash` in the decoder, resolve it to an `author` role by crc32-matching against the author mids at fetch time (zero new network calls), carry `author` through the representation stage as an *elevated* signal alongside `high_like` (extracted verbatim before LLM clustering), and render every elevated line in place — never dropped, never reordered out of content-time.
 
 **Tech Stack:** Python 3, pydantic (schema), stdlib `zlib` (crc32) + `dataclasses.replace`, dependency-free protobuf decoder (existing), pytest.
 
 ## Global Constraints
 
-- **Stdlib only for the new logic** — `zlib` (crc32) is stdlib; no new third-party dependency. Matches harvest's no-heavy-deps ethos.
+- **Stdlib only for the new logic** — `zlib` (crc32) is stdlib; no new third-party dependency. Matches blisolver's no-heavy-deps ethos.
 - **Zero new network calls** — `midHash` rides the census `seg.so` already fetched; author mids ride the `web-interface/view` response already fetched. No WBI-signed endpoints.
 - **Additive schema only** — `DanmakuLine.author` is a new optional field defaulting `None`; `SCHEMA_VERSION` stays `"1.0"`. `bundle.json`'s existing shape is unchanged for existing consumers.
 - **The LLM fence is unchanged** — the clustering call still receives only `[{text, count}]` and never sees `author` (or `high_like`, or `midHash`). Author lines are extracted *before* clustering, entirely mechanically.
@@ -23,7 +23,7 @@
 ### Task 1: Decoder reads `midHash` (protobuf field 6) into `RawDanmaku.mid_hash`
 
 **Files:**
-- Modify: `harvest/danmaku_proto.py` (add `mid_hash` field to `RawDanmaku`; read field 6 in `_parse_elem`)
+- Modify: `blisolver/danmaku_proto.py` (add `mid_hash` field to `RawDanmaku`; read field 6 in `_parse_elem`)
 - Test: `tests/test_danmaku_proto.py`
 
 **Interfaces:**
@@ -74,7 +74,7 @@ Expected: FAIL — `RawDanmaku` has no `mid_hash` attribute (`TypeError`/`Attrib
 
 - [ ] **Step 3: Add the field and read it in the decoder**
 
-In `harvest/danmaku_proto.py`, add `mid_hash` to the `RawDanmaku` dataclass (after `high_like`):
+In `blisolver/danmaku_proto.py`, add `mid_hash` to the `RawDanmaku` dataclass (after `high_like`):
 
 ```python
 @dataclass(frozen=True)
@@ -120,7 +120,7 @@ Expected: PASS — the two new tests pass and the existing `test_decode_seg_reco
 - [ ] **Step 5: Commit**
 
 ```bash
-git add harvest/danmaku_proto.py tests/test_danmaku_proto.py
+git add blisolver/danmaku_proto.py tests/test_danmaku_proto.py
 git commit -m "feat(danmaku): decode midHash (field 6) into RawDanmaku.mid_hash"
 ```
 
@@ -129,7 +129,7 @@ git commit -m "feat(danmaku): decode midHash (field 6) into RawDanmaku.mid_hash"
 ### Task 2: `ViewData` parses collaborator mids from `data.staff[]`
 
 **Files:**
-- Modify: `harvest/player_api.py` (`ViewData` gains `staff_mids`; `fetch_view` parses `data.staff`)
+- Modify: `blisolver/player_api.py` (`ViewData` gains `staff_mids`; `fetch_view` parses `data.staff`)
 - Test: `tests/test_player_api.py`
 
 **Interfaces:**
@@ -174,7 +174,7 @@ Expected: FAIL — `ViewData` has no `staff_mids` attribute.
 
 - [ ] **Step 3: Add the field and parse it**
 
-In `harvest/player_api.py`, add to `ViewData` (after `owner_name`):
+In `blisolver/player_api.py`, add to `ViewData` (after `owner_name`):
 
 ```python
     owner_mid: int | None = None
@@ -206,7 +206,7 @@ Expected: PASS — new tests pass; existing view tests (which have no `staff` ke
 - [ ] **Step 5: Commit**
 
 ```bash
-git add harvest/player_api.py tests/test_player_api.py
+git add blisolver/player_api.py tests/test_player_api.py
 git commit -m "feat(danmaku): parse 合作 staff mids into ViewData.staff_mids"
 ```
 
@@ -215,8 +215,8 @@ git commit -m "feat(danmaku): parse 合作 staff mids into ViewData.staff_mids"
 ### Task 3: `classify_authors` resolves `mid_hash` → `author`, wired into `fetch_danmaku`
 
 **Files:**
-- Modify: `harvest/danmaku_proto.py` (`RawDanmaku` gains `author`)
-- Modify: `harvest/player_api.py` (`classify_authors` helper; `fetch_danmaku` applies it)
+- Modify: `blisolver/danmaku_proto.py` (`RawDanmaku` gains `author`)
+- Modify: `blisolver/player_api.py` (`classify_authors` helper; `fetch_danmaku` applies it)
 - Test: `tests/test_player_api.py`
 
 **Interfaces:**
@@ -227,7 +227,7 @@ git commit -m "feat(danmaku): parse 合作 staff mids into ViewData.staff_mids"
 
 - [ ] **Step 1: Add `author` to `RawDanmaku`**
 
-In `harvest/danmaku_proto.py`, extend the dataclass:
+In `blisolver/danmaku_proto.py`, extend the dataclass:
 
 ```python
 @dataclass(frozen=True)
@@ -253,7 +253,7 @@ def _mid_hash(mid: int) -> str:
 
 
 def test_classify_authors_tags_owner_staff_and_leaves_crowd_and_hashless():
-    from harvest.player_api import RawDanmaku, classify_authors
+    from blisolver.player_api import RawDanmaku, classify_authors
     records = [
         RawDanmaku(content_ts=1.0, text="owner note", mid_hash=_mid_hash(7)),
         RawDanmaku(content_ts=2.0, text="staff note", mid_hash=_mid_hash(99)),
@@ -267,21 +267,21 @@ def test_classify_authors_tags_owner_staff_and_leaves_crowd_and_hashless():
 
 
 def test_classify_authors_owner_precedence_when_owner_also_in_staff():
-    from harvest.player_api import RawDanmaku, classify_authors
+    from blisolver.player_api import RawDanmaku, classify_authors
     records = [RawDanmaku(content_ts=1.0, text="x", mid_hash=_mid_hash(7))]
     out = classify_authors(records, owner_mid=7, staff_mids=[7])
     assert out[0].author == "owner"
 
 
 def test_classify_authors_no_author_mids_returns_input_unchanged():
-    from harvest.player_api import RawDanmaku, classify_authors
+    from blisolver.player_api import RawDanmaku, classify_authors
     records = [RawDanmaku(content_ts=1.0, text="x", mid_hash=_mid_hash(7))]
     out = classify_authors(records, owner_mid=None, staff_mids=[])
     assert out is records  # no-op fast path, same list object
 
 
 def test_classify_authors_tolerates_unparseable_mid_hash():
-    from harvest.player_api import RawDanmaku, classify_authors
+    from blisolver.player_api import RawDanmaku, classify_authors
     records = [RawDanmaku(content_ts=1.0, text="x", mid_hash="not-hex")]
     out = classify_authors(records, owner_mid=7, staff_mids=[])
     assert out[0].author is None
@@ -294,7 +294,7 @@ Expected: FAIL — `classify_authors` does not exist (ImportError).
 
 - [ ] **Step 4: Implement `classify_authors`**
 
-In `harvest/player_api.py`, add `import zlib` at the top with the other stdlib imports, and add `replace` to the dataclasses import:
+In `blisolver/player_api.py`, add `import zlib` at the top with the other stdlib imports, and add `replace` to the dataclasses import:
 
 ```python
 from dataclasses import dataclass, replace
@@ -378,7 +378,7 @@ Add the integration test:
 
 ```python
 def test_fetch_danmaku_classifies_author_from_view_owner_and_staff():
-    from harvest.player_api import fetch_danmaku
+    from blisolver.player_api import fetch_danmaku
 
     canonical = _canonical(part=1)
     view_payload = {
@@ -415,7 +415,7 @@ Expected: FAIL — `author` is `None` for every record (`fetch_danmaku` doesn't 
 
 - [ ] **Step 8: Apply classification in `fetch_danmaku`**
 
-In `harvest/player_api.py`, in `fetch_danmaku`, replace the final two lines:
+In `blisolver/player_api.py`, in `fetch_danmaku`, replace the final two lines:
 
 ```python
     records.sort(key=lambda r: r.content_ts)
@@ -439,7 +439,7 @@ Expected: PASS — new integration test passes; the existing `test_fetch_danmaku
 - [ ] **Step 10: Commit**
 
 ```bash
-git add harvest/danmaku_proto.py harvest/player_api.py tests/test_player_api.py
+git add blisolver/danmaku_proto.py blisolver/player_api.py tests/test_player_api.py
 git commit -m "feat(danmaku): classify UP主/合作 author danmaku via crc32(midHash)"
 ```
 
@@ -448,7 +448,7 @@ git commit -m "feat(danmaku): classify UP主/合作 author danmaku via crc32(mid
 ### Task 4: `DanmakuLine.author` schema field
 
 **Files:**
-- Modify: `harvest/schema.py` (`DanmakuLine` gains `author`)
+- Modify: `blisolver/schema.py` (`DanmakuLine` gains `author`)
 - Test: `tests/test_danmaku.py`
 
 **Interfaces:**
@@ -472,7 +472,7 @@ Expected: FAIL — pydantic ignores/rejects unknown `author` (`AttributeError` o
 
 - [ ] **Step 3: Add the field**
 
-In `harvest/schema.py`, add to `DanmakuLine` (after `high_like`; `Literal` is already imported):
+In `blisolver/schema.py`, add to `DanmakuLine` (after `high_like`; `Literal` is already imported):
 
 ```python
     author: Literal["owner", "staff"] | None = None  # video author of this line: "owner" (UP主) or
@@ -487,13 +487,13 @@ Expected: PASS.
 
 - [ ] **Step 5: Confirm `SCHEMA_VERSION` unchanged**
 
-Run: `python -c "from harvest.schema import SCHEMA_VERSION; assert SCHEMA_VERSION == '1.0', SCHEMA_VERSION; print('ok 1.0')"`
+Run: `python -c "from blisolver.schema import SCHEMA_VERSION; assert SCHEMA_VERSION == '1.0', SCHEMA_VERSION; print('ok 1.0')"`
 Expected: prints `ok 1.0` (the change is additive; no bump).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add harvest/schema.py tests/test_danmaku.py
+git add blisolver/schema.py tests/test_danmaku.py
 git commit -m "feat(schema): add DanmakuLine.author (owner/staff), additive to 1.0"
 ```
 
@@ -502,7 +502,7 @@ git commit -m "feat(schema): add DanmakuLine.author (owner/staff), additive to 1
 ### Task 5: `represent_danmaku` treats `author` as elevated (extract-before-cluster)
 
 **Files:**
-- Modify: `harvest/danmaku.py` (`_dedup_elevated` helper; per-window partition; `_fingerprint`)
+- Modify: `blisolver/danmaku.py` (`_dedup_elevated` helper; per-window partition; `_fingerprint`)
 - Test: `tests/test_danmaku.py`
 
 **Interfaces:**
@@ -518,11 +518,11 @@ def _rd(ts, text, high_like=False, author=None):
     return RawDanmaku(content_ts=ts, text=text, high_like=high_like, author=author)
 ```
 
-Add the import for `_dedup_elevated` to the existing `from harvest.danmaku import (...)` block, and add these tests:
+Add the import for `_dedup_elevated` to the existing `from blisolver.danmaku import (...)` block, and add these tests:
 
 ```python
 def test_dedup_elevated_keys_on_text_highlike_author_and_counts():
-    from harvest.danmaku import _dedup_elevated
+    from blisolver.danmaku import _dedup_elevated
     records = [
         _rd(1.0, "同", high_like=True),
         _rd(2.0, "同", high_like=True),          # same (text, flags) -> count 2
@@ -604,7 +604,7 @@ Expected: FAIL — `_dedup_elevated` does not exist; `represent_danmaku` still p
 
 - [ ] **Step 3: Add `_dedup_elevated` and repartition the window loop**
 
-In `harvest/danmaku.py`, add the helper after `_exact_dedup` (near line 90):
+In `blisolver/danmaku.py`, add the helper after `_exact_dedup` (near line 90):
 
 ```python
 def _dedup_elevated(records: list[RawDanmaku]) -> list[tuple[DanmakuLine, float]]:
@@ -678,7 +678,7 @@ Expected: PASS — new tests pass; existing high_like extraction tests still pas
 - [ ] **Step 5: Commit**
 
 ```bash
-git add harvest/danmaku.py tests/test_danmaku.py
+git add blisolver/danmaku.py tests/test_danmaku.py
 git commit -m "feat(danmaku): extract author lines before clustering as elevated"
 ```
 
@@ -687,7 +687,7 @@ git commit -m "feat(danmaku): extract author lines before clustering as elevated
 ### Task 6: `bundle.md` single-pass chronological rendering with elevation pills
 
 **Files:**
-- Modify: `harvest/merge.py` (delete `HIGH_LIKE_MD_CAP` + two-group render; add `_line_pills`; single chronological pass; extend provenance note)
+- Modify: `blisolver/merge.py` (delete `HIGH_LIKE_MD_CAP` + two-group render; add `_line_pills`; single chronological pass; extend provenance note)
 - Test: `tests/test_merge.py` (drop the `HIGH_LIKE_MD_CAP` import + two-cap test; add single-pass tests)
 
 **Interfaces:**
@@ -696,7 +696,7 @@ git commit -m "feat(danmaku): extract author lines before clustering as elevated
 
 - [ ] **Step 1: Rewrite the danmaku render tests**
 
-In `tests/test_merge.py`: remove `HIGH_LIKE_MD_CAP,` from the `from harvest.merge import (...)` block (line 7). Delete the entire `test_render_markdown_danmaku_two_cap_promoted_first_with_own_overflow_markers` function (lines ~563 to the end of that test, including its `write_bundle` tail). Add these tests:
+In `tests/test_merge.py`: remove `HIGH_LIKE_MD_CAP,` from the `from blisolver.merge import (...)` block (line 7). Delete the entire `test_render_markdown_danmaku_two_cap_promoted_first_with_own_overflow_markers` function (lines ~563 to the end of that test, including its `write_bundle` tail). Add these tests:
 
 ```python
 def test_render_markdown_danmaku_pills_owner_staff_highlike_and_both():
@@ -772,7 +772,7 @@ Expected: FAIL — new pill/overflow assertions fail (current renderer groups pr
 
 - [ ] **Step 3: Rewrite the renderer**
 
-In `harvest/merge.py`, delete the `HIGH_LIKE_MD_CAP` constant and its comment block (lines 22-26). Add a pill helper above `render_markdown`:
+In `blisolver/merge.py`, delete the `HIGH_LIKE_MD_CAP` constant and its comment block (lines 22-26). Add a pill helper above `render_markdown`:
 
 ```python
 def _line_pills(line) -> str:
@@ -836,12 +836,12 @@ Expected: PASS — new danmaku tests pass; the existing `test_render_markdown_em
 Then run the whole suite:
 
 Run: `python -m pytest -q`
-Expected: PASS — no references to `HIGH_LIKE_MD_CAP` remain (grep to confirm: `git grep -n HIGH_LIKE_MD_CAP -- harvest tests` returns nothing).
+Expected: PASS — no references to `HIGH_LIKE_MD_CAP` remain (grep to confirm: `git grep -n HIGH_LIKE_MD_CAP -- blisolver tests` returns nothing).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add harvest/merge.py tests/test_merge.py
+git add blisolver/merge.py tests/test_merge.py
 git commit -m "feat(danmaku): single-pass chronological bundle.md render with elevation pills"
 ```
 

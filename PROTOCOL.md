@@ -1,18 +1,18 @@
-# harvest — downstream (Atlas) protocol
+# blisolver — downstream (Atlas) protocol
 
-The machine-facing contract between the **Atlas** project and **harvest**. Atlas codes against the
+The machine-facing contract between the **Atlas** project and **blisolver**. Atlas codes against the
 shapes here; treat them as a stable API. Design rationale lives in [SPEC.md](SPEC.md) — you should not
 need it to update an Atlas skill against this contract.
 
-harvest supersedes `bili-tool`. The contract is **multi-source**: `platform` distinguishes the source.
+blisolver supersedes `bili-tool`. The contract is **multi-source**: `platform` distinguishes the source.
 This is a fresh `1.0` contract, not a bili-tool patch — fields that were bilibili-specific are
 generalized (see §Changes-from-bili-tool at the end).
 
 ## CLI verbs
 
 ```bash
-harvest ingest <url> [flags]   # full pipeline -> out/<id>-p<part>/ bundle
-harvest probe  <url>           # cheap pre-flight metadata only, no media
+blisolver ingest <url> [flags]   # full pipeline -> out/<id>-p<part>/ bundle
+blisolver probe  <url>           # cheap pre-flight metadata only, no media
 ```
 
 There is no bare-url form. Supported sources: `bilibili.com`, `youtube.com`.
@@ -161,7 +161,7 @@ Output is `out/<id>-p<part>/` containing `bundle.md`, `bundle.json`, and `frames
 
 ### `Danmaku` shapes (matches `schema.py::Danmaku`/`DanmakuWindow`/`DanmakuLine`) — `--danmaku` opt-in
 
-`bundle.danmaku` is `null` unless `harvest ingest --danmaku` was passed **and** the platform supports
+`bundle.danmaku` is `null` unless `blisolver ingest --danmaku` was passed **and** the platform supports
 it (bilibili.com only; YouTube has no danmaku concept, so `--danmaku` on a YouTube URL prints a
 warning and leaves `bundle.danmaku` `null` — same as not passing the flag). When `--danmaku` runs on
 bilibili and finds nothing, `bundle.danmaku` is still populated (not null) with `fetched_total: 0` and
@@ -248,7 +248,7 @@ still reads `bundle.json`.
 
 Command danmaku (互动弹幕) are the uploader's on-screen interactive widgets — a **separate class from
 danmaku**, on a separate acquisition path (`x/v2/dm/web/view` → `DmWebViewReply.commandDms`, plain
-cookies, no WBI). `bundle.interactions` is `null` unless `harvest ingest --interactions` was passed
+cookies, no WBI). `bundle.interactions` is `null` unless `blisolver ingest --interactions` was passed
 **and** the platform supports it (bilibili.com only; on YouTube it prints a warning and stays `null`,
 same as not passing the flag). When it runs on bilibili and finds nothing, `bundle.interactions` is
 still populated (not null) with `votes: []` and `grades: []` — "requested, found nothing" is
@@ -336,9 +336,9 @@ opt-in: bilibili videos with a nonzero danmaku count are candidates for danmaku 
 clean local Whisper transcript is trustworthy; a machine auto-caption is a coin-flip. `language` is a
 separate axis — a `whisper` transcript's language is Whisper's detected (or `--lang`-pinned) language.
 
-> harvest produces `auto-sub` on **both** paths: bilibili when its quality gate passes, and YouTube
+> blisolver produces `auto-sub` on **both** paths: bilibili when its quality gate passes, and YouTube
 > when the original-language auto-caption clears a structural validity net. Mind the split: `auto-sub`
-> is authority-ranked **below** `whisper` (rank it that way), yet harvest acquisition-*prefers* it over
+> is authority-ranked **below** `whisper` (rank it that way), yet blisolver acquisition-*prefers* it over
 > Whisper for cost — so a bundle's `auto-sub` means "cheapest trustworthy-enough track we had," not
 > "best we could produce." A consumer who needs the higher-authority track re-runs with
 > `--force-whisper`.
@@ -350,4 +350,4 @@ separate axis — a `whisper` transcript's language is Whisper's detected (or `-
 - `transcript.source` value `"ai-zh"` is **renamed** to `"auto-sub"`; language moves to
   `transcript.language`.
 - `published_at` offset is now **per-source** (was always `+08:00`); read the offset from the value.
-- Invocation is `harvest …`, not `bili-tool …`.
+- Invocation is `blisolver …`, not `bili-tool …`.

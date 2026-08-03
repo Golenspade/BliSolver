@@ -2,8 +2,8 @@ import json
 
 import pytest
 
-from harvest.config import Settings
-from harvest.danmaku import (
+from blisolver.config import Settings
+from blisolver.danmaku import (
     PROMPT_VERSION,
     _boundaries,
     _dedup_elevated,
@@ -14,9 +14,9 @@ from harvest.danmaku import (
     represent_danmaku,
     window_records,
 )
-from harvest.player_api import DanmakuFetch, RawDanmaku
-from harvest.providers.base import Canonical
-from harvest.schema import Danmaku, DanmakuLine
+from blisolver.player_api import DanmakuFetch, RawDanmaku
+from blisolver.providers.base import Canonical
+from blisolver.schema import Danmaku, DanmakuLine
 
 
 def _canonical():
@@ -359,7 +359,7 @@ def test_represent_danmaku_no_records_produces_no_windows_and_no_llm_call(tmp_pa
 
 
 def test_represent_danmaku_batches_large_windows_and_merges_results(tmp_path, monkeypatch):
-    import harvest.danmaku as dm
+    import blisolver.danmaku as dm
 
     monkeypatch.setattr(dm, "_BATCH_CAP", 2)
     records = [_rd(float(i), f"msg{i}") for i in range(5)]  # 5 distinct entries, cap=2 -> 3 batches
@@ -519,7 +519,7 @@ def test_represent_danmaku_llm_payload_has_no_high_like_or_metadata_keys(tmp_pat
 
 
 def test_fingerprint_differs_when_only_high_like_flag_differs(tmp_path):
-    from harvest.danmaku import _fingerprint
+    from blisolver.danmaku import _fingerprint
 
     fetch_a = DanmakuFetch(
         source_total=1, fetched_total=1, records=[_rd(1.0, "hi", high_like=False)]
@@ -556,7 +556,7 @@ def test_represent_danmaku_cache_restages_when_high_like_flag_changes(tmp_path):
 
 def test_represent_danmaku_prompt_forbids_gaps_section_and_count_descending():
     # Static assertion on the prompt contract itself (corrections applied to the seed).
-    from harvest.danmaku import DANMAKU_PROMPT
+    from blisolver.danmaku import DANMAKU_PROMPT
 
     assert "GAPS" not in DANMAKU_PROMPT
     assert "descending" not in DANMAKU_PROMPT.lower()
@@ -564,7 +564,7 @@ def test_represent_danmaku_prompt_forbids_gaps_section_and_count_descending():
 
 
 def test_dedup_elevated_keys_on_text_highlike_author_and_counts():
-    from harvest.danmaku import _dedup_elevated
+    from blisolver.danmaku import _dedup_elevated
     records = [
         _rd(1.0, "同", high_like=True),
         _rd(2.0, "同", high_like=True),          # same (text, flags) -> count 2
@@ -644,9 +644,9 @@ def test_represent_danmaku_extracts_author_lines_before_clustering(tmp_path):
 def test_live_danmaku_smoke():
     """Real LM Studio path: fenced clustering on a tiny hand-built batch. Excluded by default
     (-m 'not live'); run explicitly with `-m live` against a running LM Studio instance that has
-    HARVEST_DANMAKU_MODEL loaded."""
+    BLISOLVER_DANMAKU_MODEL loaded."""
     settings = Settings.load()
-    assert settings.lmstudio_danmaku_model, "set HARVEST_DANMAKU_MODEL to run this smoke test"
+    assert settings.lmstudio_danmaku_model, "set BLISOLVER_DANMAKU_MODEL to run this smoke test"
 
     records = [
         _rd(1.0, "233"),

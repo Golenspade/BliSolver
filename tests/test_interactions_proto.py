@@ -1,4 +1,4 @@
-"""Tests for `harvest.interactions_proto.decode_view` — the dependency-free protobuf decoder for
+"""Tests for `blisolver.interactions_proto.decode_view` — the dependency-free protobuf decoder for
 bilibili's command-danmaku view endpoint (`x/v2/dm/web/view`, `DmWebViewReply.commandDms`).
 
 Fixtures are SYNTHESIZED inline via a tiny test-only protobuf encoder (mirrors the wire format:
@@ -8,7 +8,7 @@ offline while asserting exact known values. Shipped code only ever DECODES."""
 
 from __future__ import annotations
 
-from harvest.interactions_proto import RawCommandDm, decode_view
+from blisolver.interactions_proto import RawCommandDm, decode_view
 
 
 def _varint(n: int) -> bytes:

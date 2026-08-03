@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "harvest"
+name = "blisolver"
 version = "0.1.0"
 description = "Ingestion front-door: a bilibili URL -> a timeline-aligned transcript + per-frame visual-notes bundle for a downstream knowledge base (Atlas)."
 requires-python = ">=3.11"
@@ -36,10 +36,10 @@ mcp = ["mcp>=1.0"]
 dev = ["pytest>=8"]
 
 [project.scripts]
-harvest = "harvest.cli:main"
+blisolver = "blisolver.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["harvest"]
+packages = ["blisolver"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

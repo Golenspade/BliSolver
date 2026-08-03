@@ -1,4 +1,4 @@
-# harvest — Danmaku + Metadata Enrichment Design & Plan
+# blisolver — Danmaku + Metadata Enrichment Design & Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (or
 > superpowers:executing-plans) to implement this plan task-by-task, each task strictly following
@@ -25,10 +25,10 @@ not yet consumed `1.0`, so it learns the expanded shape directly — no migratio
 
 ### Danmaku philosophy (the load-bearing constraints)
 - **Danmaku is a first-class payload, not lecture-enrichment.** The memes / sarcasm / collective
-  mood ARE the value; for some videos danmaku > the audio content. harvest stays general-purpose —
+  mood ARE the value; for some videos danmaku > the audio content. blisolver stays general-purpose —
   ingestion focus (is danmaku the point for *this* video?) is the caller's/hermes's call, not
-  harvest's.
-- **Narrow, hard-quarantined interpretive exception (SPEC §1/§8).** harvest is otherwise
+  blisolver's.
+- **Narrow, hard-quarantined interpretive exception (SPEC §1/§8).** blisolver is otherwise
   non-interpretive; the danmaku stage is the *one* place an LLM is applied to produce output. It is
   fenced: a separate, explicitly-crowd-sourced, **LOWER-authority** track, never fused into
   `transcript`. Requires an explicit SPEC carve-out.
@@ -40,7 +40,7 @@ not yet consumed `1.0`, so it learns the expanded shape directly — no migratio
 - **Chronological order within a window — NOT count-descending.** (Empirical: count-sort destroyed
   the temporal signal; every ceiling agent flagged structure-loss as the #1 gap.) Order carries the
   crowd's real-time progression (mutation chains, pile-ons, escalation). Representing *structure*
-  (threads/factions/mutations) is hermes's job to INFER from the ordered mirror — harvest never
+  (threads/factions/mutations) is hermes's job to INFER from the ordered mirror — blisolver never
   marks it. Reply-thread reconstruction is out of scope (no parent-id exists; would be decode).
 - **Windowing:** danmaku is chunked on **fixed content-time windows aligned to the existing bundle
   chunks** (`merge.py::chunk`). Density imbalance between windows is **signal, not noise** (a burst
@@ -68,11 +68,11 @@ not yet consumed `1.0`, so it learns the expanded shape directly — no migratio
   `<think>`; `finish=length`, 0 content). Fix = **reasoning disabled** (qwen3 `/no_think`) and/or a
   **non-reasoning model** (`gemma-4-12b-it` is already loaded) + adequate budget. Danmaku needs a
   **per-stage model selector** distinct from the vision VL model (the predicted SPEC §4.3
-  consequence). New `.env`: `HARVEST_DANMAKU_MODEL`, `HARVEST_DANMAKU_MAX_TOKENS` (default ~8192).
+  consequence). New `.env`: `BLISOLVER_DANMAKU_MODEL`, `BLISOLVER_DANMAKU_MAX_TOKENS` (default ~8192).
 
 ---
 
-## Concrete schema (target `harvest/schema.py`)
+## Concrete schema (target `blisolver/schema.py`)
 
 ```python
 class Stats(BaseModel):
@@ -176,8 +176,8 @@ class Danmaku(BaseModel):
 - [ ] Mechanical **exact-dedup** pre-pass (deterministic: collapse byte-identical → text+count).
 - [ ] **Window** by fixed content-time aligned to bundle chunks; **dynamic count-batching** for LLM
       calls under the hood; reassemble into fixed windows.
-- [ ] LLM call via a **danmaku-specific model selector** (reasoning-off; `HARVEST_DANMAKU_MODEL`,
-      `HARVEST_DANMAKU_MAX_TOKENS`). Prompt = the mirror contract (`scratch/_contract.md` is the
+- [ ] LLM call via a **danmaku-specific model selector** (reasoning-off; `BLISOLVER_DANMAKU_MODEL`,
+      `BLISOLVER_DANMAKU_MAX_TOKENS`). Prompt = the mirror contract (`scratch/_contract.md` is the
       validated seed): verbatim, cluster near-dups, representative selection, **chronological order**,
       no decode. Produce `DanmakuWindow`/`DanmakuLine`.
 - [ ] Cache per Global Constraints. Offline unit tests with a stub LLM client; one `@live` smoke test.
@@ -200,7 +200,7 @@ class Danmaku(BaseModel):
   model-routing decision).
 
 ## Deferred (not this batch)
-- **AV remux for collection** — a distinct `harvest collect` verb (SPEC §8 grammar); does not touch
+- **AV remux for collection** — a distinct `blisolver collect` verb (SPEC §8 grammar); does not touch
   the `1.0` bundle contract.
 - **Protobuf `seg.so` full-census danmaku** — if XML sampling proves insufficient (schema already
   ready via `sampled`).

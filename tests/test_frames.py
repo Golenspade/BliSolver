@@ -1,8 +1,8 @@
 import types
 
-from harvest.config import Settings
-from harvest.frames import dedup_phashes, hamming
-from harvest.providers.base import Canonical
+from blisolver.config import Settings
+from blisolver.frames import dedup_phashes, hamming
+from blisolver.providers.base import Canonical
 
 
 def test_hamming_identical_is_zero():
@@ -79,7 +79,7 @@ class _FakeYDL:
 
 
 def _fake_ydl_factory(monkeypatch, info, writes=None):
-    from harvest import frames as F
+    from blisolver import frames as F
 
     def make(opts):
         opts["_test_info"] = info
@@ -96,7 +96,7 @@ def _prep(tmp_path, key):
 
 
 def test_download_video_youtube_uses_native_downloader(tmp_path, monkeypatch):
-    from harvest import frames as F
+    from blisolver import frames as F
 
     s = Settings(cache_dir=tmp_path, aria2c_path="C:/aria2c.exe")
     target = _prep(tmp_path, "youtube.com_F8X9_Dp3ZUk_1")
@@ -109,7 +109,7 @@ def test_download_video_youtube_uses_native_downloader(tmp_path, monkeypatch):
 
 
 def test_download_video_bilibili_keeps_aria2c(tmp_path, monkeypatch):
-    from harvest import frames as F
+    from blisolver import frames as F
 
     s = Settings(cache_dir=tmp_path, aria2c_path="C:/aria2c.exe")
     target = _prep(tmp_path, "bilibili.com_BV1_1")

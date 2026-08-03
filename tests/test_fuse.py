@@ -2,13 +2,13 @@
 same-source selection. Unit coverage; the end-to-end run on BV1LD7U65Ew2 (whisper 67%
 repetition hallucination vs real OCR) is the real proof.
 """
-from harvest.fuse import (
+from blisolver.fuse import (
     HALLUC_REPEAT_RATIO,
     cross_verify_with_ocr,
     detect_hallucination,
     fuse,
 )
-from harvest.schema import Segment, Transcript
+from blisolver.schema import Segment, Transcript
 
 
 def _whisper_transcript(texts: list[str], dur: float = 1.0) -> Transcript:

@@ -1,7 +1,7 @@
 import pytest
 
-from harvest.providers import base
-from harvest.providers.base import Canonical, SourceMetadata, register, select_provider
+from blisolver.providers import base
+from blisolver.providers.base import Canonical, SourceMetadata, register, select_provider
 
 
 class _StubA:

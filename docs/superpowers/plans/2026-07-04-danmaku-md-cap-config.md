@@ -2,16 +2,16 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Lower the per-window danmaku render cap from 50 to 15 and promote it from a hardcoded module constant to a configurable `Settings.danmaku_md_cap` (env `HARVEST_DANMAKU_MD_CAP`).
+**Goal:** Lower the per-window danmaku render cap from 50 to 15 and promote it from a hardcoded module constant to a configurable `Settings.danmaku_md_cap` (env `BLISOLVER_DANMAKU_MD_CAP`).
 
-**Architecture:** The cap only ever trimmed `bundle.md` (the primary Atlas-ingestion surface); `bundle.json` stays complete and uncapped, so this touches no schema contract (`PROTOCOL.md` 1.0 is keyed to `bundle.json`). The value moves into `Settings` beside the sibling `danmaku_window_s`/`HARVEST_DANMAKU_WINDOW_S` knob; `render_markdown` already receives `settings`, so wiring is local. `HIGH_LIKE_MD_CAP` stays a hardcoded constant — a confirmed non-lever (~1 promoted line/window; never bites).
+**Architecture:** The cap only ever trimmed `bundle.md` (the primary Atlas-ingestion surface); `bundle.json` stays complete and uncapped, so this touches no schema contract (`PROTOCOL.md` 1.0 is keyed to `bundle.json`). The value moves into `Settings` beside the sibling `danmaku_window_s`/`BLISOLVER_DANMAKU_WINDOW_S` knob; `render_markdown` already receives `settings`, so wiring is local. `HIGH_LIKE_MD_CAP` stays a hardcoded constant — a confirmed non-lever (~1 promoted line/window; never bites).
 
 **Tech Stack:** Python 3.11, dataclasses, pytest, `python-dotenv`.
 
 ## Global Constraints
 
 - The `## Danmaku` section cap applies to `bundle.md` ONLY. `bundle.json` MUST remain complete and uncapped (regression-guarded by `test_bundle_json_roundtrip_carries_complete_uncapped_danmaku`).
-- Default cap value: `15`. Env override: `HARVEST_DANMAKU_MD_CAP`.
+- Default cap value: `15`. Env override: `BLISOLVER_DANMAKU_MD_CAP`.
 - Mirror the existing `danmaku_window_s` config idiom exactly (field default + `int(os.environ.get(...))` in `Settings.load()` + a config test).
 - Do NOT edit dated historical artifacts under `.superpowers/sdd/` or `docs/superpowers/plans/2026-07-03-*.md` — they record what was built at the time; rewriting them falsifies the record. Live cascade only.
 - `HIGH_LIKE_MD_CAP = 20` is out of scope — leave it exactly as-is.
@@ -21,12 +21,12 @@
 ### Task 1: Add `danmaku_md_cap` to Settings (config field + env override)
 
 **Files:**
-- Modify: `harvest/config.py:137` (add field after `danmaku_window_s`) and `harvest/config.py:155-157` (add env parse in `load()`)
+- Modify: `blisolver/config.py:137` (add field after `danmaku_window_s`) and `blisolver/config.py:155-157` (add env parse in `load()`)
 - Modify: `.env.example:11` (add sibling env line)
 - Test: `tests/test_config.py` (add after `test_danmaku_window_s_default_is_15_and_env_overridable`)
 
 **Interfaces:**
-- Produces: `Settings.danmaku_md_cap: int` (default `15`), populated from `HARVEST_DANMAKU_MD_CAP` in `Settings.load()`. Consumed by `render_markdown` in Task 2.
+- Produces: `Settings.danmaku_md_cap: int` (default `15`), populated from `BLISOLVER_DANMAKU_MD_CAP` in `Settings.load()`. Consumed by `render_markdown` in Task 2.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -34,9 +34,9 @@ Add to `tests/test_config.py` (mirrors the `danmaku_window_s` test directly abov
 
 ```python
 def test_danmaku_md_cap_default_is_15_and_env_overridable(monkeypatch):
-    monkeypatch.delenv("HARVEST_DANMAKU_MD_CAP", raising=False)
+    monkeypatch.delenv("BLISOLVER_DANMAKU_MD_CAP", raising=False)
     assert Settings.load().danmaku_md_cap == 15
-    monkeypatch.setenv("HARVEST_DANMAKU_MD_CAP", "25")
+    monkeypatch.setenv("BLISOLVER_DANMAKU_MD_CAP", "25")
     assert Settings.load().danmaku_md_cap == 25
 ```
 
@@ -47,7 +47,7 @@ Expected: FAIL with `AttributeError: 'Settings' object has no attribute 'danmaku
 
 - [ ] **Step 3: Add the field**
 
-In `harvest/config.py`, immediately after the `danmaku_window_s: float = 15.0` line (currently line 137), add:
+In `blisolver/config.py`, immediately after the `danmaku_window_s: float = 15.0` line (currently line 137), add:
 
 ```python
     # Per-window cap on ORDINARY danmaku lines rendered in bundle.md (the primary Atlas
@@ -60,20 +60,20 @@ In `harvest/config.py`, immediately after the `danmaku_window_s: float = 15.0` l
 
 - [ ] **Step 4: Wire the env override**
 
-In `harvest/config.py`, inside the `cls(...)` call in `load()`, immediately after the `danmaku_window_s=float(...)` block (currently lines 155-157), add:
+In `blisolver/config.py`, inside the `cls(...)` call in `load()`, immediately after the `danmaku_window_s=float(...)` block (currently lines 155-157), add:
 
 ```python
             danmaku_md_cap=int(
-                os.environ.get("HARVEST_DANMAKU_MD_CAP", cls.danmaku_md_cap)
+                os.environ.get("BLISOLVER_DANMAKU_MD_CAP", cls.danmaku_md_cap)
             ),
 ```
 
 - [ ] **Step 5: Document the env var**
 
-In `.env.example`, after line 11 (`# HARVEST_DANMAKU_WINDOW_S=15`), add:
+In `.env.example`, after line 11 (`# BLISOLVER_DANMAKU_WINDOW_S=15`), add:
 
 ```
-# HARVEST_DANMAKU_MD_CAP=15
+# BLISOLVER_DANMAKU_MD_CAP=15
 ```
 
 - [ ] **Step 6: Run test to verify it passes**
@@ -84,8 +84,8 @@ Expected: PASS (new test + existing `danmaku_window_s` test both green)
 - [ ] **Step 7: Commit**
 
 ```bash
-git add harvest/config.py tests/test_config.py .env.example
-git commit -m "feat: add configurable danmaku_md_cap (default 15, HARVEST_DANMAKU_MD_CAP)"
+git add blisolver/config.py tests/test_config.py .env.example
+git commit -m "feat: add configurable danmaku_md_cap (default 15, BLISOLVER_DANMAKU_MD_CAP)"
 ```
 
 ---
@@ -93,7 +93,7 @@ git commit -m "feat: add configurable danmaku_md_cap (default 15, HARVEST_DANMAK
 ### Task 2: Wire render_markdown to `settings.danmaku_md_cap`; remove the constant
 
 **Files:**
-- Modify: `harvest/merge.py:19-21` (remove `DANMAKU_MD_CAP` constant + its comment), `harvest/merge.py:184` and `harvest/merge.py:187` (read from settings)
+- Modify: `blisolver/merge.py:19-21` (remove `DANMAKU_MD_CAP` constant + its comment), `blisolver/merge.py:184` and `blisolver/merge.py:187` (read from settings)
 - Modify: `tests/test_merge.py:5` (drop the import) and the four tests that referenced the constant (lines ~467, ~483 unaffected, ~494, ~535)
 
 **Interfaces:**
@@ -102,12 +102,12 @@ git commit -m "feat: add configurable danmaku_md_cap (default 15, HARVEST_DANMAK
 
 - [ ] **Step 1: Update the failing tests first (they pin the new behavior)**
 
-The four tests currently import `DANMAKU_MD_CAP` from `harvest.merge`. Rewrite them to read the cap from `settings` so they stay correct at any default.
+The four tests currently import `DANMAKU_MD_CAP` from `blisolver.merge`. Rewrite them to read the cap from `settings` so they stay correct at any default.
 
 In `tests/test_merge.py`, change the import block (lines 4-12) to drop `DANMAKU_MD_CAP,` (keep `HIGH_LIKE_MD_CAP`):
 
 ```python
-from harvest.merge import (
+from blisolver.merge import (
     HIGH_LIKE_MD_CAP,
     build_bundle,
     chunk,
@@ -209,15 +209,15 @@ def test_bundle_json_roundtrip_carries_complete_uncapped_danmaku(tmp_path):
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `python -m pytest tests/test_merge.py -v`
-Expected: FAIL at import — `ImportError: cannot import name 'DANMAKU_MD_CAP' from 'harvest.merge'`
+Expected: FAIL at import — `ImportError: cannot import name 'DANMAKU_MD_CAP' from 'blisolver.merge'`
 
 - [ ] **Step 3: Update merge.py — remove the constant, read from settings**
 
-In `harvest/merge.py`, replace the constant block (lines 19-24) so only `HIGH_LIKE_MD_CAP` remains, with a pointer comment:
+In `blisolver/merge.py`, replace the constant block (lines 19-24) so only `HIGH_LIKE_MD_CAP` remains, with a pointer comment:
 
 ```python
 # The ordinary per-window danmaku cap for bundle.md lives in Settings.danmaku_md_cap
-# (env HARVEST_DANMAKU_MD_CAP) -- a tunable gestalt-sample dial. bundle.json is always complete.
+# (env BLISOLVER_DANMAKU_MD_CAP) -- a tunable gestalt-sample dial. bundle.json is always complete.
 # Separate cap for platform-promoted (high_like) lines, rendered as their own group ahead of
 # ordinary lines with their own overflow marker. Not a contract knob -- a rendering constant.
 HIGH_LIKE_MD_CAP = 20
@@ -243,7 +243,7 @@ Expected: PASS (all render/roundtrip danmaku tests green)
 - [ ] **Step 5: Commit**
 
 ```bash
-git add harvest/merge.py tests/test_merge.py
+git add blisolver/merge.py tests/test_merge.py
 git commit -m "refactor: render danmaku cap from settings.danmaku_md_cap; drop constant"
 ```
 
@@ -270,13 +270,13 @@ with:
 
 ```
 - `bundle.md`'s `## Danmaku` section caps ordinary lines per window at `danmaku_md_cap`
-  (default 15; override `HARVEST_DANMAKU_MD_CAP`), with a `﹢N more` marker; `bundle.json` is
+  (default 15; override `BLISOLVER_DANMAKU_MD_CAP`), with a `﹢N more` marker; `bundle.json` is
   the complete, uncapped record. "Requested, found nothing" = populated with `fetched_total: 0`;
 ```
 
 - [ ] **Step 2: Verify no stale LIVE reference to "50 lines/window" remains**
 
-Run (from `c:/Users/2phite/GitHub/harvest`):
+Run (from `c:/Users/2phite/GitHub/blisolver`):
 
 ```bash
 grep -rn "caps at 50\|50 lines/window" --include=*.md --include=*.py . "C:/Users/2phite/AppData/Local/hermes/skills"
@@ -291,7 +291,7 @@ git add "C:/Users/2phite/AppData/Local/hermes/skills/research/video-transcript-i
 git commit -m "docs: point danmaku cap note at configurable danmaku_md_cap default"
 ```
 
-(If the skills dir is a separate git repo from harvest, run this commit inside that repo instead.)
+(If the skills dir is a separate git repo from blisolver, run this commit inside that repo instead.)
 
 ---
 
@@ -309,7 +309,7 @@ Expected: all tests pass (config, merge, cli, danmaku, providers).
 Run:
 
 ```bash
-python -c "from harvest.config import Settings; from harvest.merge import render_markdown; from harvest.schema import Bundle, Danmaku, DanmakuWindow, DanmakuLine, Transcript; \
+python -c "from blisolver.config import Settings; from blisolver.merge import render_markdown; from blisolver.schema import Bundle, Danmaku, DanmakuWindow, DanmakuLine, Transcript; \
 w=DanmakuWindow(start=0.0,end=15.0,total=40,lines=[DanmakuLine(text=f'l{i}',count=1) for i in range(40)]); \
 b=Bundle(platform='bilibili.com',id='BV1',part=1,url='u',fetched_at='2026-07-04T00:00:00Z',transcript=Transcript(source='whisper',source_reason='t',segments=[]),frames=[],danmaku=Danmaku(source_total=None,fetched_total=40,model=None,windows=[w])); \
 md=render_markdown(b,Settings()); print('l14 in md:', 'l14' in md, '| l15 in md:', 'l15' in md, '| overflow:', '﹢25 more' in md)"
