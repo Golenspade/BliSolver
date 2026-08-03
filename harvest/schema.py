@@ -98,6 +98,14 @@ class Stats(BaseModel):
     danmaku_count:  int | None = None   # bilibili danmaku total (--danmaku opt-in signal); YT null
 
 
+class SubtitleTrackInfo(BaseModel):
+    """Metadata describing one available subtitle track on the source platform."""
+
+    code: str
+    source: SegmentSource
+    title: str | None = None
+
+
 class ProbeResult(BaseModel):
     """Cheap pre-flight metadata (no transcript/frames): lets Atlas estimate workload before
     committing to the full pipeline."""
@@ -116,6 +124,8 @@ class ProbeResult(BaseModel):
     stats: Stats | None = None
     parts: int
     part_durations_s: list[int | None] = Field(default_factory=list)
+    original_language: str | None = None
+    available_subtitles: list[SubtitleTrackInfo] = Field(default_factory=list)
 
 
 class DanmakuLine(BaseModel):
@@ -219,6 +229,8 @@ class Bundle(BaseModel):
     duration_s: int | None = None
     published_at: str | None = None  # ISO 8601, video's publish time (SPEC: bilibili pubdate)
     thumbnail_url: str | None = None  # intrinsic/descriptive, NOT part of `stats`
+    original_language: str | None = None
+    available_subtitles: list[SubtitleTrackInfo] = Field(default_factory=list)
     fetched_at: str  # ISO 8601 UTC, e.g. "2026-06-28T12:00:00Z"
     stats: Stats | None = None
     transcript: Transcript
