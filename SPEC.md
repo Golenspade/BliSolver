@@ -124,12 +124,14 @@ quality metrics; YouTube deliberately does **not** (unreliable across ~150 langu
 preferring the cheaper auto-caption and leaving the quality call to the consumer's `--force-whisper`.
 Provenance is what makes that trade honest: Atlas always knows which tier it got.
 
-**bilibili** (unchanged from bili-tool):
-- Prefer human sub > AI caption; original zh only. yt-dlp does **not** surface bilibili AI subs, so a
-  cookie-authenticated `x/player/v2` fallback (no WBI signing) fetches them; `ai_type` 0 = original
-  transcription, 1 = translation (translations ignored).
-- **Quality gate** (any one metric trips → Whisper): punct density, dup ratio, non-CJK ratio, cps.
-  Thresholds are calibratable config, not law.
+**bilibili** (unchanged from bili-tool structural design, heavily upgraded for censorship bypass):
+- **Censorship Proxy Pipeline:**
+  - Preference: `human-sub` > `ai-zh` > `ai-en` / `ai-ja` etc.
+  - Native Chinese tracks (`human-zh`, `ai-zh`) are scanned for platform censorship (e.g., `**`, `XX`).
+  - If censorship is detected, the track is explicitly discarded. The system automatically falls back to foreign language AI translations (`ai-en`, etc.) which typically bypass native ASR filters while preserving the core concepts.
+- **Dynamic Quality gate** (any one metric trips → Whisper):
+  - Metrics: punct density, dup ratio, non-CJK ratio (`nonzh_ratio`), cps.
+  - **Language-Aware Bypass**: If the selected track is a foreign fallback (e.g. `ai-en`), the strict `nonzh_ratio` check is bypassed, and the upper `cps` limit is relaxed (>40) to accommodate the naturally higher density of alphabetical languages.
 - **#6357 two-tier assertion:** tier-1 duration sanity (last cue vs part duration, 0.70–1.10); tier-2
   (part > 1) reject if text is near-identical to part 1 (yt-dlp's #6357 signature). Fail → Whisper.
 

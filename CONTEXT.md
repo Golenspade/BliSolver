@@ -14,6 +14,12 @@ either already in the bundle or a candidate to add to it.
 The original-language, timeline-aligned speech track — the authoritative content of a video.
 Highest authority in the bundle.
 
+**Censored track**:
+A Chinese track (typically `ai-zh` or `human-zh`) that has been mutilated by platform word-filters (e.g. `**`, `XX`). Automatically discarded by blisolver when detected.
+
+**Fallback proxy track**:
+A foreign-language AI translation (e.g. `ai-en`, `ai-ja`) fetched proactively by blisolver strictly as a censorship-bypass mechanism when the native Chinese track is deemed a **Censored track**. Retains the same authority as `auto-sub` but preserves raw concepts lost in native ASR filters.
+
 **Danmaku track**:
 A faithful, verbatim MIRROR of the scrolling audience comments (弹幕) that overlay a bilibili
 video, organized into content-time windows. It is crowd expression (memes, jokes, sarcasm, often

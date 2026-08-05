@@ -140,7 +140,7 @@ Output is `out/<id>-p<part>/` containing `bundle.md`, `bundle.json`, and `frames
   },
   "transcript": {
     "source": "human-sub",             // "human-sub" | "auto-sub" | "whisper"  ← provenance
-    "language": "en",                  // language axis, separate from source
+    "language": "en",                  // language axis (e.g., 'zh', or 'ai-en' if censorship fallback triggered)
     "model": "large-v3",               // whisper model; null when source is a caption
     "robust": false,
     "quality_gate": { … } | null,      // populated only when a caption was gated (bilibili)
