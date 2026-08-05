@@ -132,13 +132,20 @@ def _pick_tracks(info: dict) -> list[tuple[str, str, list]]:
     
     candidates = []
     
-    # 1. Human-CC outranks everything (highly likely to be original Chinese text).
+    # 1. Human-CC outranks everything
     for key in _HUMAN_ZH_KEYS:
         if key in human:
             candidates.append(("human-sub", key, human[key]))
             
-    # 2. Foreign language AI fallbacks (en > ja > others).
-    # Prioritized OVER ai-zh to proactively bypass censorship if CC is missing or censored.
+    # 2. Chinese AI-generated subtitles (prioritized for normal non-sensitive videos)
+    for key in _AUTO_ZH_KEYS:
+        if key in human:                  # bilibili: ai-zh lives in `subtitles`
+            candidates.append(("auto-sub", key, human[key]))
+        if key in auto:                    # YouTube: ai-zh lives in `automatic_captions`
+            candidates.append(("auto-sub", key, auto[key]))
+            
+    # 3. Foreign language AI fallbacks (en > ja > others)
+    # Used as a safety net if the Chinese tracks above trigger the censorship regex.
     fallback_langs = [
         "ai-en", "en",
         "ai-ja", "ja",
@@ -155,13 +162,6 @@ def _pick_tracks(info: dict) -> list[tuple[str, str, list]]:
             candidates.append(("auto-sub", fallback_lang, human[fallback_lang]))
         elif fallback_lang in auto:
             candidates.append(("auto-sub", fallback_lang, auto[fallback_lang]))
-            
-    # 3. Chinese AI-generated subtitles (lowest priority among AI tracks due to censorship risks)
-    for key in _AUTO_ZH_KEYS:
-        if key in human:                  # bilibili: ai-zh lives in `subtitles`
-            candidates.append(("auto-sub", key, human[key]))
-        if key in auto:                    # YouTube: ai-zh lives in `automatic_captions`
-            candidates.append(("auto-sub", key, auto[key]))
             
     return candidates
 
