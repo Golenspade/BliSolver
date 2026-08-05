@@ -5,7 +5,7 @@
 Copy this single sentence into your agent:
 
 ```text
-Install the `blisolver-video-ingestion` skill from `https://github.com/alttina/bilibili-get-content` for all supported agents using `npx skills add https://github.com/alttina/bilibili-get-content --skill blisolver-video-ingestion --global --agent '*' --yes`; then verify with `npx skills list` and confirm that `blisolver-video-ingestion` is listed.
+Install the `blisolver-video-ingestion` skill from `https://github.com/alttina/bilibili-get-content` for all supported agents using `npx skills add https://github.com/alttina/bilibili-get-content --global --agent '*' --yes`; then verify with `npx skills list` and confirm that `blisolver-video-ingestion` is listed.
 ```
 
 ## Terminal command
@@ -14,7 +14,7 @@ Copy and run this single command in a terminal to install the `blisolver-video-i
 all supported agents:
 
 ```bash
-npx skills add alttina/bilibili-get-content --skill blisolver-video-ingestion --global --agent '*' --yes
+npx skills add alttina/bilibili-get-content --global --agent '*' --yes
 ```
 
 The repository name is `bilibili-get-content`; the installed skill name is
@@ -23,13 +23,13 @@ The repository name is `bilibili-get-content`; the installed skill name is
 For one specific agent, replace `'*'` with its adapter name, for example:
 
 ```bash
-npx skills add alttina/bilibili-get-content --skill blisolver-video-ingestion --global --agent codex --yes
+npx skills add alttina/bilibili-get-content --global --agent codex --yes
 ```
 
 For a project-local installation, omit `--global`:
 
 ```bash
-npx skills add alttina/bilibili-get-content --skill blisolver-video-ingestion --yes
+npx skills add alttina/bilibili-get-content --yes
 ```
 
 Verify installation with:

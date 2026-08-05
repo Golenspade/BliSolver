@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>✨ Bilibili Get Content (Agent Skill)</h1>
+  <img src="https://capsule-render.vercel.app/api?type=waving&color=timeGradient&height=250&section=header&text=BliSolver&fontSize=90&animation=fadeIn&fontAlignY=38&desc=Portable%20Agent%20Skill%20for%20Video%20Ingestion&descAlignY=55&descAlign=50" alt="Skill Banner">
   <p><strong>Portable Agent Skill for operating the BliSolver <code>blisolver</code> video-ingestion pipeline.</strong></p>
   <p>
     <a href="README.md">English</a> | <a href="README_zh.md">简体中文</a>
@@ -24,7 +24,6 @@ The skill teaches compatible coding agents how to:
 
 ```bash
 npx skills add alttina/bilibili-get-content \
-  --skill blisolver-video-ingestion \
   --global \
   --agent '*' \
   --yes
@@ -34,7 +33,6 @@ npx skills add alttina/bilibili-get-content \
 
 ```bash
 npx skills add alttina/bilibili-get-content \
-  --skill blisolver-video-ingestion \
   --global \
   --agent codex \
   --yes
@@ -75,6 +73,24 @@ The skill package is portable, but media processing depends on the target enviro
 - the isolated `.ocr-venv` worker only when hard-subtitle OCR is requested.
 
 Provider credentials belong in the target environment or browser profile. Never put cookies, API keys, or `SESSDATA` in command arguments, URLs, README files, or logs.
+
+## 🛠️ Model Setup (Local Inference)
+
+BliSolver runs AI models locally to ensure privacy and avoid API costs. You must set up the following models and sandboxes before ingesting videos:
+
+**1. Whisper ASR Model (Audio-to-Text)**  
+Required for generating transcripts when official subtitles are unavailable. Download the GGML model (~1.5GB) to the default path:
+```bash
+curl -sL -o /tmp/ggml-medium.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin
+```
+*(You can override the default path by setting the `BLISOLVER_WHISPER_MODEL` environment variable).*
+
+**2. OCR Sandbox (Hard-subtitle Extraction)**  
+Required only if you use the `--ocr` flag to extract burned-in subtitles. To avoid dependency pollution, the OCR engine must be installed in a dedicated isolated virtual environment at the project root:
+```bash
+uv venv .ocr-venv
+.ocr-venv/bin/pip install rapidocr-onnxruntime opencv-python
+```
 
 ## 🔄 Update and remove
 

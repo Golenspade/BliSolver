@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>✨ Bilibili Get Content (Agent Skill)</h1>
+  <img src="https://capsule-render.vercel.app/api?type=waving&color=timeGradient&height=250&section=header&text=BliSolver&fontSize=90&animation=fadeIn&fontAlignY=38&desc=%E4%BE%BF%E6%90%BA%E5%BC%8FAgent%20Skill&descAlignY=55&descAlign=50" alt="Skill Banner">
   <p><strong>用于操作 BliSolver <code>harvest</code> 视频摄取管道的便携式 Agent Skill。</strong></p>
   <p>
     <a href="README.md">English</a> | <a href="README_zh.md">简体中文</a>
@@ -24,7 +24,6 @@
 
 ```bash
 npx skills add alttina/bilibili-get-content \
-  --skill harvest-video-ingestion \
   --global \
   --agent '*' \
   --yes
@@ -34,7 +33,6 @@ npx skills add alttina/bilibili-get-content \
 
 ```bash
 npx skills add alttina/bilibili-get-content \
-  --skill harvest-video-ingestion \
   --global \
   --agent codex \
   --yes
@@ -76,6 +74,24 @@ npx skills add alttina/bilibili-get-content \
 - 仅当需要硬字幕 OCR 时，才需要独立的 `.ocr-venv` 工作环境。
 
 数据源提供商的授权凭据 (Credentials) 应保存在目标环境中或浏览器配置内。**严禁**将 Cookies、API 密钥或 `SESSDATA` 放在命令行参数、URL、README 文件或日志中打印。
+
+## 🛠️ 本地模型与沙箱配置 (Model Setup)
+
+BliSolver 采用 100% 本地运行策略以确保隐私并避免高昂的 API 成本开销。在首次运行视频解析前，请务必完成以下模型和环境的下载与配置：
+
+**1. Whisper ASR 语音模型**  
+当视频没有官方提供的字幕时，系统需要回退到本地进行 AI 听写。请使用以下命令下载 1.5GB 的 GGML 模型到默认路径：
+```bash
+curl -sL -o /tmp/ggml-medium.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin
+```
+*(你可以通过设置 `BLISOLVER_WHISPER_MODEL` 环境变量来更改模型的存放路径)。*
+
+**2. 隔离的 OCR 沙箱环境**  
+只有在运行带有 `--ocr` 参数的命令时才需要此项配置。为了避免沉重的视觉处理框架（如 OpenCV 和 ONNX）污染主工程依赖，BliSolver 要求 OCR 引擎运行在独立的虚拟环境中，请在项目根目录下执行：
+```bash
+uv venv .ocr-venv
+.ocr-venv/bin/pip install rapidocr-onnxruntime opencv-python
+```
 
 ## 🔄 更新与卸载
 

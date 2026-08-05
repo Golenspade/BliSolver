@@ -142,8 +142,19 @@ def _pick_tracks(info: dict) -> list[tuple[str, str, list]]:
         if key in auto:                    # YouTube: ai-zh lives in `automatic_captions`
             candidates.append(("auto-sub", key, auto[key]))
             
-    # Foreign language fallbacks for censorship bypass
-    for fallback_lang in ["ai-en", "ai-ja", "en", "ja"]:
+    # Foreign language fallbacks for censorship bypass (en > ja > others)
+    fallback_langs = [
+        "ai-en", "en",
+        "ai-ja", "ja",
+        "ai-es", "es",
+        "ai-ar", "ar",
+        "ai-pt", "pt",
+        "ai-ko", "ko",
+        "ai-th", "th",
+        "ai-id", "id",
+        "ai-vi", "vi"
+    ]
+    for fallback_lang in fallback_langs:
         if fallback_lang in human:
             candidates.append(("auto-sub", fallback_lang, human[fallback_lang]))
         elif fallback_lang in auto:
