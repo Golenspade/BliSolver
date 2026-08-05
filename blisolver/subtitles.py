@@ -121,23 +121,36 @@ def extract_info(url: str, settings: Settings) -> dict:
         return ydl.extract_info(url, download=False)
 
 
-def _pick_track(info: dict) -> tuple[str, str, list] | None:
-    """Return (source_label, lang_key, formats) for the best original-zh track, or None.
+def _pick_tracks(info: dict) -> list[tuple[str, str, list]]:
+    """Return a priority-ordered list of (source_label, lang_key, formats) tracks.
 
     Human-CC outranks ASR auto-sub. bilibili delivers ai-zh inside the `subtitles` field (not
-    `automatic_captions`), so we DON'T use the field as the source signal — the KEY name decides:
-    `ai-*` is always auto-sub regardless of which yt-dlp field carried it."""
+    `automatic_captions`). The list includes foreign AI subs (ai-en, ai-ja) as fallbacks
+    for censorship bypass."""
     human = info.get("subtitles") or {}
     auto = info.get("automatic_captions") or {}
+    
+    candidates = []
+    
     for key in _HUMAN_ZH_KEYS:
         if key in human:
-            return "human-sub", key, human[key]
+            candidates.append(("human-sub", key, human[key]))
+            
     for key in _AUTO_ZH_KEYS:
         if key in human:                  # bilibili: ai-zh lives in `subtitles`
-            return "auto-sub", key, human[key]
+            candidates.append(("auto-sub", key, human[key]))
         if key in auto:                    # YouTube: ai-zh lives in `automatic_captions`
-            return "auto-sub", key, auto[key]
-    return None
+            candidates.append(("auto-sub", key, auto[key]))
+            
+    # Foreign language fallbacks for censorship bypass
+    for fallback_lang in ["ai-en", "ai-ja", "en", "ja"]:
+        if fallback_lang in human:
+            candidates.append(("auto-sub", fallback_lang, human[fallback_lang]))
+        elif fallback_lang in auto:
+            candidates.append(("auto-sub", fallback_lang, auto[fallback_lang]))
+            
+    return candidates
+
 
 
 def _download_track(formats: list, settings: Settings) -> tuple[str, str]:
@@ -253,19 +266,26 @@ def _segments_from_track(formats: list, settings: Settings) -> list[Segment]:
 def _acquire(
     info: dict, canonical: Canonical, settings: Settings, _fetch, *, view=None
 ) -> tuple[str, str, list[Segment]] | None:
-    """Get (source, lang, segments) for the best original-zh track from yt-dlp's track list.
-
-    yt-dlp (with `BLISOLVER_COOKIES_BROWSER=chrome`) now surfaces bilibili's AI subtitle tracks
-    (`ai-zh`/...) directly in `automatic_captions`, so this is the sole acquisition path; the
-    player-API subtitle手爬 fallback that used to live here was removed in the 2026-07 refactor
-    (it was dead code on the cookie path). `view` is accepted for call-site compatibility but
-    no longer drives any fallback fetch.
-    """
-    pick = _pick_track(info)
-    if pick is None:
+    """Get (source, lang, segments) for the best track, with censorship fallback support.
+    Iterates through the tracks returned by _pick_tracks."""
+    candidates = _pick_tracks(info)
+    if not candidates:
         return None
-    source, lang, formats = pick
-    return source, lang, _fetch(formats, settings)
+        
+    for source, lang, formats in candidates:
+        segments = _fetch(formats, settings)
+        
+        # Check for censorship in Chinese tracks
+        if lang in _AUTO_ZH_KEYS or lang in _HUMAN_ZH_KEYS:
+            import re
+            raw_text = "".join(s.text for s in segments)
+            if re.search(r'\*\*|XX|和[Xx]', raw_text):
+                print(f"[{canonical.id}] Censorship detected in track {lang}, trying fallback...")
+                continue
+                
+        return source, lang, segments
+        
+    return None
 
 
 def fetch_subtitle_segments(

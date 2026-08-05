@@ -23,6 +23,7 @@ def evaluate(
     thresholds: QualityThresholds,
     *,
     source: str | None = None,
+    lang_key: str | None = None,
 ) -> QualityGate:
     """Quality gate. Any ONE tripping metric rejects the sub -> Whisper. Not a weighted score.
 
@@ -44,8 +45,12 @@ def evaluate(
     dup_ratio = (n - uniq) / n if n else 0.0
 
     letters = [c for c in text if not c.isspace()]
-    nonzh = [c for c in letters if not _is_cjk(c) and c not in _PUNCT and not c.isdigit()]
-    nonzh_ratio = len(nonzh) / len(letters) if letters else 0.0
+    is_foreign = lang_key and not any(zh in lang_key for zh in ("zh", "zh-CN", "zh-TW", "zh-Hans", "zh-Hant"))
+    if is_foreign:
+        nonzh_ratio = 0.0
+    else:
+        nonzh = [c for c in letters if not _is_cjk(c) and c not in _PUNCT and not c.isdigit()]
+        nonzh_ratio = len(nonzh) / len(letters) if letters else 0.0
 
     cps = total / duration_s if duration_s and duration_s > 0 else None
 
@@ -54,11 +59,17 @@ def evaluate(
         # ASR captions are punctuation-less by construction; the metric is reported but doesn't
         # trip the verdict (it can't tell good AI from bad — both score ~0).
         punct_trips = False
+    
+    cps_trips = cps is not None and not (thresholds.cps_min <= cps <= thresholds.cps_max)
+    if is_foreign and cps is not None:
+        # English CPS is natively much higher than CJK (letters vs characters)
+        cps_trips = cps > 40.0 # arbitrary high bound for English
+        
     tripped = (
         punct_trips
         or dup_ratio > thresholds.dup_ratio_max
         or nonzh_ratio > thresholds.nonzh_ratio_max
-        or (cps is not None and (cps < thresholds.cps_min or cps > thresholds.cps_max))
+        or cps_trips
     )
 
     return QualityGate(

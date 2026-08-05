@@ -131,7 +131,7 @@ class BilibiliProvider:
                 language=None, segments=[],
             )
         gate = evaluate(sub.segments, float(info.get("duration") or 0), settings.quality,
-                       source=sub.source)
+                       source=sub.source, lang_key=sub.lang)
         if gate.passed:
             return SubtitleOutcome(
                 accepted=True, source=sub.source,
