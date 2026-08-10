@@ -252,7 +252,7 @@ git commit -m "refactor: render danmaku cap from settings.danmaku_md_cap; drop c
 ### Task 3: Doc cascade — update the live "caps at 50" assertion
 
 **Files:**
-- Modify: `C:/Users/2phite/AppData/Local/hermes/skills/research/video-transcript-ingestion/SKILL.md:148`
+- Modify: `<hermes-skills-dir>/research/video-transcript-ingestion/SKILL.md:148`
 
 **Interfaces:**
 - No code. This is a factual-reference correction: a stale literal is wrong, not history to preserve. No pressure-test applies (no behavior-shaping guidance; the writing-skills Iron Law targets discipline skills, not fact fixes).
@@ -276,10 +276,10 @@ with:
 
 - [ ] **Step 2: Verify no stale LIVE reference to "50 lines/window" remains**
 
-Run (from `c:/Users/2phite/GitHub/blisolver`):
+Run (from `<blisolver-checkout>`):
 
 ```bash
-grep -rn "caps at 50\|50 lines/window" --include=*.md --include=*.py . "C:/Users/2phite/AppData/Local/hermes/skills"
+grep -rn "caps at 50\|50 lines/window" --include=*.md --include=*.py . "<hermes-skills-dir>"
 ```
 
 Expected: no output. (Historical `.superpowers/sdd/*` and `docs/.../2026-07-03-*.md` mention `DANMAKU_MD_CAP = 50` as a record of prior work — those are intentionally left; the grep above targets the live prose phrasing only and should return nothing.)
@@ -287,7 +287,7 @@ Expected: no output. (Historical `.superpowers/sdd/*` and `docs/.../2026-07-03-*
 - [ ] **Step 3: Commit**
 
 ```bash
-git add "C:/Users/2phite/AppData/Local/hermes/skills/research/video-transcript-ingestion/SKILL.md"
+git add "<hermes-skills-dir>/research/video-transcript-ingestion/SKILL.md"
 git commit -m "docs: point danmaku cap note at configurable danmaku_md_cap default"
 ```
 

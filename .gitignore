@@ -9,6 +9,12 @@ cache/
 out/
 scratch/
 
+# third-party video transcripts kept locally for calibration, not for redistribution
+transcripts/
+
+# agent conversation archives and other working notes
+docs/user_data/
+
 # throwaway probes (danmaku dumper, dumps)
 scratch/
 

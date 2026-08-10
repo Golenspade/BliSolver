@@ -262,7 +262,7 @@ bundle.md + bundle.json（schema 1.1）+ MCP 可查
 
 ```bash
 # 端到端 ingest（已跑通）——在仓库根目录执行
-cd /Users/mvgz0236/alttina/BliSolver
+cd /path/to/BliSolver
 BLISOLVER_COOKIES_BROWSER=chrome \
 BLISOLVER_WHISPER_MODEL=/tmp/ggml-medium.bin \
 BLISOLVER_WHISPER_CLI=/opt/homebrew/bin/whisper-cli \
