@@ -135,7 +135,16 @@ def test_show_command_targets_the_project_environment():
 
 def test_wrapper_runs_the_pipeline_under_an_unrelated_interpreter():
     """End-to-end proof of the fix: invoke the wrapper with the system python, which has none of
-    blisolver's dependencies, and the child still reports a healthy runtime."""
+    blisolver's dependencies, and the child still runs in the project environment.
+
+    The load-bearing assertion is the child's own `interpreter` check, not a path comparison made
+    from this process. `doctor._interpreter_check` compares `sys.prefix` against the `.venv` beside
+    the package it was imported from, so the child answers "am I in the project environment?"
+    using only paths it resolved itself. Comparing `report["interpreter"]` to a path built here
+    instead breaks whenever the checkout or the environment sits behind a symlink, and resolving
+    both sides collapses them onto the base interpreter, which would let any virtual environment
+    pass.
+    """
     system_python = Path("/usr/bin/python3")
     if not system_python.exists():
         pytest.skip("no /usr/bin/python3 on this platform")
@@ -147,9 +156,18 @@ def test_wrapper_runs_the_pipeline_under_an_unrelated_interpreter():
     )
     assert result.returncode in (0, 1), result.stderr
     report = json.loads(result.stdout)
-    assert report["interpreter"] == str(PROJECT_VENV_PYTHON)
+
     interpreter_check = next(c for c in report["checks"] if c["name"] == "interpreter")
-    assert interpreter_check["status"] == "ok"
+    assert interpreter_check["status"] == "ok", (
+        f"child did not run in the project environment: {interpreter_check['detail']}"
+    )
+    child = Path(report["interpreter"])
+    assert child.resolve() != system_python.resolve(), (
+        "the pipeline ran under the interpreter that launched the wrapper"
+    )
+    assert child.parts[-3:] == (".venv", "bin", "python"), (
+        f"unexpected child interpreter shape: {child}"
+    )
 
 
 def test_explicit_interpreter_override_wins():
