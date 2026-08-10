@@ -17,7 +17,10 @@ the command to create one:
 
 ```bash
 uv venv <plugin-root>/.venv
-<plugin-root>/.venv/bin/python -m pip install -e "<plugin-root>[mcp]"
+uv pip install --python <plugin-root>/.venv/bin/python -e "<plugin-root>[mcp]"
+# or, if you prefer the standard library:
+#   python3 -m venv <plugin-root>/.venv
+#   <plugin-root>/.venv/bin/pip install -e "<plugin-root>[mcp]"
 ```
 
 `$BLISOLVER_PYTHON` overrides the search when the environment lives somewhere unusual.
@@ -31,7 +34,7 @@ uv venv <plugin-root>/.venv
 | YouTube extraction | deno or node | either; deno is yt-dlp's preferred runtime |
 | local ASR | `whisper-cli` plus a GGML model | see below |
 | frame vision | LM Studio serving the configured model *and its projector* | `LMSTUDIO_VISION_MODEL` |
-| burned-in OCR | an isolated environment | `uv venv .ocr-venv && .ocr-venv/bin/pip install rapidocr-onnxruntime opencv-python` |
+| burned-in OCR | an isolated environment | `uv venv .ocr-venv && uv pip install --python .ocr-venv/bin/python rapidocr-onnxruntime opencv-python` |
 | danmaku | `BLISOLVER_DANMAKU_MODEL` | LM Studio model id |
 
 The ASR model is checked separately from the binary because having one says nothing about the other:

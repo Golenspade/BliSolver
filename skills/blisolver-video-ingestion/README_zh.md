@@ -99,7 +99,7 @@ curl -sL -o /tmp/ggml-medium.bin \
 
 ```bash
 uv venv .ocr-venv
-.ocr-venv/bin/pip install rapidocr-onnxruntime opencv-python
+uv pip install --python .ocr-venv/bin/python rapidocr-onnxruntime opencv-python
 ```
 
 ## 🔐 凭据

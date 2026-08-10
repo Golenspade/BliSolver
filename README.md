@@ -33,24 +33,69 @@ BliSolver encapsulates each source behind a **provider** and turns the result in
 - **NVIDIA GPU** or **Apple Silicon** (Metal) for fast whisper transcription.
 - **LM Studio** running with a VL model and its mmproj loaded for the vision stage.
 - **Auth (per source):**
-  - **bilibili:** A logged-in **Firefox** profile (default), or a `SESSDATA` fallback.
+  - **bilibili:** A logged-in **Chrome** profile (default; override with `BLISOLVER_COOKIES_BROWSER`), or a `SESSDATA` fallback.
   - **YouTube:** None for public videos; optionally a browser profile to unlock age-gated/bot-checked content.
 
 ## 📦 Setup
 
+Either interpreter path works. `uv venv` does **not** install `pip` into the environment, so use
+`uv pip` rather than `<venv>/bin/pip` when you take the uv route.
+
 ```bash
-python -m venv .venv
-source .venv/bin/activate          # Linux/macOS
-# .venv\Scripts\activate           # Windows
+git clone https://github.com/alttina/BliSolver.git && cd BliSolver
 
-pip install -e .                   # core deps
-pip install -e ".[transcribe]"     # + faster-whisper (or whisper.cpp on Mac)
-pip install -e ".[frames,vision]"  # + frame extraction & captioning
+# with uv
+uv venv .venv
+uv pip install --python .venv/bin/python -e ".[mcp,frames,vision]"
 
-cp .env.example .env               # configure your environment
+# or with the standard library
+python3 -m venv .venv
+.venv/bin/pip install -e ".[mcp,frames,vision]"
+
+cp .env.example .env
+.venv/bin/blisolver doctor          # verify what is ready before spending on media
 ```
 
-> **Note:** Configure `.env` with your LM Studio endpoint/token/model, and per-source auth variables. Never commit your `.env` file.
+There is no `transcribe` extra: local ASR runs whisper.cpp through the external `whisper-cli`
+binary plus a GGML model file, neither of which is a Python package. `doctor` checks the binary and
+the weights separately, and prints the command to fetch the weights if they are missing.
+
+> **Note:** Configure `.env` with your LM Studio endpoint/model and per-source auth. Never commit your `.env`.
+
+## 🔌 Use as an Agent Plugin
+
+This repository *is* an [Agent Plugin](https://agent-plugins.org) — `plugin.json` sits at the root
+beside the application, so a compatible client can load the skill and the MCP server directly:
+
+```text
+BliSolver/
+├── plugin.json      # Agent Plugins 1.0.0 manifest
+├── mcp.json         # one stdio MCP server
+├── bin/blisolver-mcp
+├── blisolver/       # the application
+└── skills/
+    └── blisolver-video-ingestion/   # SKILL.md, references/, scripts/
+```
+
+**Installation is client-defined.** The Agent Plugins specification standardizes the directory
+shape and deliberately leaves distribution, installation, and enablement to each client, so there
+is no universal install command. Clone this repository, then point your client at the directory —
+see [Compatible Clients](https://agent-plugins.org/compatible-clients) for per-client setup
+(Cursor, GitHub Copilot, Hermes Agent, Kiro, VS Code at the time of writing).
+
+Two things are worth knowing before you wire it up:
+
+- **The MCP server needs an interpreter that has the dependencies.** `mcp.json` runs
+  `./bin/blisolver-mcp`, which resolves `$BLISOLVER_PYTHON`, then `$PLUGIN_DATA/venv/bin/python`,
+  then `<plugin-root>/.venv/bin/python`, then an installed `blisolver`. Run the Setup above first,
+  or the server exits with the command to create one.
+- **Credentials are not in the manifest.** The specification treats configured `env` values as
+  visible package data, and `mcp.json` is committed, so `SESSDATA` and `LMSTUDIO_API_KEY` must come
+  from the environment or `.env`. A client that sanitizes the environment will start a server with
+  no bilibili session, and every bilibili video will fall back to Whisper.
+
+`mcp.json` sets `BLISOLVER_DATA_DIR` to `${PLUGIN_DATA}`, so caches and bundles land in the
+client-managed data directory and survive a plugin update.
 
 ## 🚀 Usage
 

@@ -33,30 +33,73 @@ BliSolver 将每个数据源封装在一个 **Provider (提供程序)** 背后�
 - **NVIDIA GPU** 或 **Apple Silicon** (Metal) 用于加速 Whisper 转录。
 - **LM Studio** 需在后台运行，并加载了视觉模型 (VL) 及其 mmproj 投影文件，用于视觉标注阶段。
 - **授权 (分数据源):**
-  - **Bilibili:** 一个已登录的 **Firefox** 浏览器配置 (默认)，或使用 `SESSDATA` 作为备用方案。
+  - **Bilibili:** 一个已登录的 **Chrome** 浏览器配置（默认；可用 `BLISOLVER_COOKIES_BROWSER` 覆盖），或使用 `SESSDATA` 作为备用方案。
   - **YouTube:** 公开视频无需授权；对于年龄限制或机器人检测视频，可选配置浏览器配置文件。
 
 ## 📦 安装与配置
 
+两条路径都可用。注意 `uv venv` **不会**把 `pip` 装进环境，所以走 uv 时要用 `uv pip`，而不是
+`<venv>/bin/pip`。
+
 ```bash
-python -m venv .venv
-source .venv/bin/activate          # Linux/macOS
-# .venv\Scripts\activate           # Windows
+git clone https://github.com/alttina/BliSolver.git && cd BliSolver
 
-pip install -e .                   # 核心依赖
-pip install -e ".[transcribe]"     # + faster-whisper (Mac下支持 whisper.cpp)
-pip install -e ".[frames,vision]"  # + 抽帧与视觉大模型支持
+# 使用 uv
+uv venv .venv
+uv pip install --python .venv/bin/python -e ".[mcp,frames,vision]"
 
-cp .env.example .env               # 配置您的环境变量
+# 或使用标准库 venv
+python3 -m venv .venv
+.venv/bin/pip install -e ".[mcp,frames,vision]"
+
+cp .env.example .env
+.venv/bin/blisolver doctor          # 在为媒体处理花钱之前先看清哪些能力就绪
 ```
 
-> **注意：** 在 `.env` 中配置 LM Studio 接口地址/Token/模型名称，以及各数据源的授权变量。请勿提交您的 `.env` 文件。
+**没有 `transcribe` extra。** 本地 ASR 走的是 whisper.cpp——外部的 `whisper-cli` 可执行文件加一份
+GGML 权重文件，两者都不是 Python 包。`doctor` 会分别检查二进制和权重，缺权重时会直接给出下载命令。
+
+> **注意：** 在 `.env` 中配置 LM Studio 接口地址/模型，以及各数据源的授权变量。请勿提交您的 `.env` 文件。
+
+## 🔌 作为 Agent Plugin 使用
+
+**这个仓库本身就是一个 [Agent Plugin](https://agent-plugins.org)** —— `plugin.json` 位于根目录、与应用
+并存，兼容的客户端可以直接加载其中的 skill 和 MCP 服务：
+
+```text
+BliSolver/
+├── plugin.json      # Agent Plugins 1.0.0 清单
+├── mcp.json         # 一个 stdio MCP 服务
+├── bin/blisolver-mcp
+├── blisolver/       # 应用本体
+└── skills/
+    └── blisolver-video-ingestion/   # SKILL.md、references/、scripts/
+```
+
+**安装方式由客户端定义。** Agent Plugins 规范只标准化目录形状，**刻意**把分发、安装、启用留给各客户端，
+所以不存在通用安装命令。clone 本仓库，然后把这个目录交给你的客户端 —— 各客户端的具体配置见
+[Compatible Clients](https://agent-plugins.org/compatible-clients)（撰写时为 Cursor、GitHub
+Copilot、Hermes Agent、Kiro、VS Code）。
+
+接线前有两件事值得先知道：
+
+- **MCP 服务需要一个装了依赖的解释器。** `mcp.json` 执行 `./bin/blisolver-mcp`，它按
+  `$BLISOLVER_PYTHON` → `$PLUGIN_DATA/venv/bin/python` → `<plugin-root>/.venv/bin/python` →
+  PATH 上已安装的 `blisolver` 依次解析。先完成上面的安装步骤，否则服务会退出并打印建环境的命令。
+- **凭据不放在清单里。** 规范把配置中的 `env` 值视为可见的包数据，而 `mcp.json` 是要提交的，所以
+  `SESSDATA` 和 `LMSTUDIO_API_KEY` 必须来自环境变量或 `.env`。如果客户端清洗了环境变量，服务启动后
+  就没有 B 站会话，所有 B 站视频都会退回 Whisper。
+
+`mcp.json` 把 `BLISOLVER_DATA_DIR` 设为 `${PLUGIN_DATA}`，因此缓存和产物落在客户端管理的数据目录里，
+插件更新后仍然保留。
 
 ## 🚀 使用方法
 
 ```bash
-harvest ingest <url> [选项]
-harvest probe  <url>
+blisolver ingest <url> [选项]
+blisolver probe  <url>
+blisolver doctor [--json]
+blisolver mcp
 ```
 
 ### 常用选项

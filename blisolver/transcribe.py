@@ -36,7 +36,7 @@ WHISPER_CLI = os.environ.get("BLISOLVER_WHISPER_CLI", shutil.which("whisper-cli"
 
 
 def download_audio(canonical: Canonical, settings: Settings) -> Path:
-    """Download + cache bestaudio for the part. faster-whisper decodes the container directly."""
+    """Download + cache bestaudio for the part. `transcribe` downmixes it to 16 kHz mono first."""
     key = fs_key(canonical.platform, canonical.id, canonical.part)
     audio_dir = settings.cache_dir / "audio"
     audio_dir.mkdir(parents=True, exist_ok=True)

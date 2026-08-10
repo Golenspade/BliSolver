@@ -103,7 +103,7 @@ environment:
 
 ```bash
 uv venv .ocr-venv
-.ocr-venv/bin/pip install rapidocr-onnxruntime opencv-python
+uv pip install --python .ocr-venv/bin/python rapidocr-onnxruntime opencv-python
 ```
 
 ## 🔐 Credentials

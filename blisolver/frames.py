@@ -62,7 +62,7 @@ def download_video(canonical, settings: Settings) -> Path:
         {
             # Video-only (no audio): frames don't need sound, and skipping the mux avoids the
             # corrupt-merge failure. Prefer H.264 for decode robustness, else any <=720 stream
-            # (bilibili often serves AV1/HEVC, handled by the PyAV scenedetect backend).
+            # (bilibili often serves AV1/HEVC; ffmpeg handles the decode).
             "format": "bv*[height<=720][vcodec~='avc1']/bv*[height<=720]/bv*",
             "outtmpl": str(vdir / f"{key}.%(ext)s"),
         }

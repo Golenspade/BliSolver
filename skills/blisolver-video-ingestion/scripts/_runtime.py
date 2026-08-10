@@ -118,8 +118,11 @@ def resolve_runtime(explicit_root: str | None = None) -> Runtime:
     raise RuntimeError_(
         "no interpreter with blisolver's dependencies was found.\n"
         f"Tried, in order:\n{attempted}\n  installed          blisolver on PATH\n"
-        f"Create the environment once:\n"
-        f"  uv venv {root}/.venv && {root}/.venv/bin/python -m pip install -e {root}"
+        f"Create the environment once, with either:\n"
+        f"  uv venv {root}/.venv && uv pip install --python {root}/.venv/bin/python -e '{root}[mcp]'\n"
+        f"  python3 -m venv {root}/.venv && {root}/.venv/bin/pip install -e '{root}[mcp]'\n"
+        f"(`uv venv` does not install pip into the environment, so `python -m pip` will not work "
+        f"there; use `uv pip` as above.)"
     )
 
 

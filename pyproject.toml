@@ -19,21 +19,24 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# step 3: quality gate + Whisper fallback. CUDA runtime DLLs (cublas/cudnn) come via the nvidia
-# wheels on Windows so ctranslate2 can find cublas64_12.dll without a system CUDA install.
-transcribe = [
-    "faster-whisper>=1.2.1",
-    "nvidia-cublas-cu12; platform_system == 'Windows'",
-    "nvidia-cudnn-cu12; platform_system == 'Windows'",
-    "nvidia-cuda-runtime-cu12; platform_system == 'Windows'",
-]
+# NOTE: there is no `transcribe` extra. Local ASR runs whisper.cpp through the external
+# `whisper-cli` binary plus a GGML model file, neither of which is a Python package — see
+# blisolver/transcribe.py and `blisolver doctor`, which checks the binary and the weights
+# separately. A `transcribe` extra used to pull faster-whisper and NVIDIA CUDA wheels; nothing has
+# imported faster_whisper since the whisper.cpp shim landed, so installing it downloaded hundreds
+# of megabytes to satisfy no import.
 # step 4: frame extraction + perceptual dedup
-frames = ["scenedetect>=0.7", "Pillow>=12", "imagehash>=4.3.2"]
+frames = ["Pillow>=12", "imagehash>=4.3.2"]
 # step 5: vision captioning
 vision = ["openai>=2.44"]
 # Phase E: MCP interface layer (Agent-callable server)
-mcp = ["mcp>=1.0"]
-dev = ["pytest>=8"]
+# Upper bound is load-bearing, not caution: mcp 2.0 removed `mcp.server.fastmcp` entirely (2.x
+# exposes `MCPServer`/`Server` instead), which server.py imports. The constraint used to be an open
+# `>=1.0`, so a fresh install resolved 2.x and `blisolver mcp` died with ModuleNotFoundError on the
+# first run while an older pinned environment kept working. Migrating to the 2.x API is a separate
+# piece of work; until then this bound is what makes the declared dependency true.
+mcp = ["mcp>=1.0,<2"]
+dev = ["pytest>=8", "jsonschema>=4.20", "ruff>=0.6"]
 
 [project.scripts]
 blisolver = "blisolver.cli:main"
