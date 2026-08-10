@@ -41,7 +41,10 @@ def download_audio(canonical: Canonical, settings: Settings) -> Path:
     audio_dir = settings.cache_dir / "audio"
     audio_dir.mkdir(parents=True, exist_ok=True)
 
-    existing = [p for p in audio_dir.glob(f"{key}.*") if p.suffix != ".part"]
+    existing = [
+        p for p in audio_dir.glob(f"{key}.*")
+        if p.suffix not in (".part", ".srt") and not p.name.endswith(".16k.wav")
+    ]
     if existing:
         return existing[0]
 
@@ -80,7 +83,10 @@ def _resolve_audio_path(info: dict, audio_dir: Path, key: str) -> Path:
     for cand in (info.get("filepath"), *(rd.get(k) for k in keys)):
         if cand and Path(cand).exists():
             return Path(cand)
-    matches = [p for p in audio_dir.glob(f"{key}.*") if p.suffix != ".part"]
+    matches = [
+        p for p in audio_dir.glob(f"{key}.*")
+        if p.suffix not in (".part", ".srt") and not p.name.endswith(".16k.wav")
+    ]
     if matches:
         return matches[0]
     listing = sorted(p.name for p in audio_dir.iterdir()) if audio_dir.exists() else []
@@ -140,9 +146,9 @@ def transcribe(
     cmd = [WHISPER_CLI, "-m", model, "-f", str(wav), "-of", str(out_prefix), "-osrt"]
     if lang:
         cmd += ["-l", lang]
-    # robust => disable condition_on_previous_text (whisper.cpp: --no-context)
+    # robust => disable condition_on_previous_text (whisper.cpp: --max-context 0)
     if robust:
-        cmd.append("--no-context")
+        cmd += ["--max-context", "0"]
     # flash-attn is whisper.cpp's default and harmless on Metal; keep it on for speed.
     subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 

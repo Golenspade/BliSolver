@@ -42,18 +42,20 @@ def test_transcribe_defaults_language_to_none(monkeypatch, tmp_path):
     cmd = captured["cmd"]
     assert "-m" in cmd and cmd[cmd.index("-m") + 1] == "ggml.bin"
     assert "-l" not in cmd            # default: language auto-detect, no flag
-    assert "--no-context" not in cmd   # robust=False
+    assert "--max-context" not in cmd  # robust=False
     assert segs[0].text == "hi"
 
 
 def test_transcribe_threads_explicit_lang(monkeypatch, tmp_path):
-    # explicit lang="zh" => "-l zh" on the whisper-cli argv; robust=True => "--no-context".
+    # explicit lang="zh" => "-l zh" on the whisper-cli argv; robust=True => "--max-context 0"
+    # (whisper.cpp spells "disable condition_on_previous_text" as a zero context window; there is
+    # no --no-context flag on whisper-cli).
     from blisolver import transcribe as T
     audio, captured = _stub_whisper_cli(monkeypatch, tmp_path)
     T.transcribe(audio, model="ggml.bin", lang="zh", robust=True)
     cmd = captured["cmd"]
     assert "-l" in cmd and cmd[cmd.index("-l") + 1] == "zh"
-    assert "--no-context" in cmd   # robust=True
+    assert "--max-context" in cmd and cmd[cmd.index("--max-context") + 1] == "0"  # robust=True
 
 
 # --- issue #3: robust audio-file recovery + downloader scoping ---------------------------------
