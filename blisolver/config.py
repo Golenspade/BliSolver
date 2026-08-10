@@ -192,7 +192,7 @@ class Settings:
     tool_version: str = TOOL_VERSION
 
     @classmethod
-    def load(cls) -> "Settings":
+    def load(cls) -> Settings:
         load_dotenv(PROJECT_ROOT / ".env")
         s = cls(
             lmstudio_base_url=os.environ.get("LMSTUDIO_BASE_URL", cls.lmstudio_base_url),
@@ -224,7 +224,7 @@ class Settings:
         return s
 
 
-def _resolve_data_dirs(s: "Settings") -> "Settings":
+def _resolve_data_dirs(s: Settings) -> Settings:
     """Decide where cache/ and out/ live.
 
     Agent Plugins 1.0.0 §9.1 designates `PLUGIN_DATA` as the client-managed directory for exactly
@@ -257,7 +257,7 @@ def _resolve_data_dirs(s: "Settings") -> "Settings":
     return s
 
 
-def _resolve_ocr_paths(s: "Settings") -> "Settings":
+def _resolve_ocr_paths(s: Settings) -> Settings:
     """Auto-detect the OCR worker script + its isolated venv Python when unset.
 
     Environment overrides win, then the repository layout. The previous order was inverted relative

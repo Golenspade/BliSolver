@@ -12,8 +12,8 @@ import pytest
 from blisolver.config import Settings
 from blisolver.mcp import server as mcp_server
 from blisolver.mcp.server import (
-    JobRecord,
     _MODE_FLAGS,
+    JobRecord,
     get_timeline_payload,
     get_transcript_payload,
     get_visual_context_payload,

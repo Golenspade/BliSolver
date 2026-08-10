@@ -17,7 +17,17 @@ import yaml
 
 from .config import Settings
 from .providers.base import Canonical, SourceMetadata
-from .schema import Bundle, Danmaku, Frame, Interactions, Meta, Segment, Stats, SubtitleTrackInfo, Transcript
+from .schema import (
+    Bundle,
+    Danmaku,
+    Frame,
+    Interactions,
+    Meta,
+    Segment,
+    Stats,
+    SubtitleTrackInfo,
+    Transcript,
+)
 
 # The ordinary per-window danmaku cap for bundle.md lives in Settings.danmaku_md_cap
 # (env BLISOLVER_DANMAKU_MD_CAP) -- a tunable gestalt-sample dial. bundle.json is always complete.

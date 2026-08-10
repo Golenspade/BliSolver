@@ -22,8 +22,8 @@ import yaml
 
 from blisolver.config import Settings
 from blisolver.merge import render_markdown
-from blisolver.providers.base import Canonical, SourceMetadata
-from blisolver.schema import Bundle, Meta, Segment, SubtitleTrackInfo, Transcript
+from blisolver.providers.base import Canonical
+from blisolver.schema import Bundle, Meta, Segment, Transcript
 from blisolver.subtitles import classify_track
 
 

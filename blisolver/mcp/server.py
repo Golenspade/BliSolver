@@ -30,8 +30,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..config import PROJECT_ROOT, Settings
-from ..providers.base import select_provider
 from ..probe import probe as _probe
+from ..providers.base import select_provider
 
 # --- job store -----------------------------------------------------------------------
 
@@ -41,7 +41,7 @@ _JOBS_DIRNAME = "mcp-jobs"
 # children) instead of os.kill(pid,0) — the latter misreports zombies as alive, so a job that
 # already finished stayed "running" forever. Lost on server restart; the bundle-exists check
 # below covers that case (a finished job always wrote its bundle before exiting).
-_PROCS: dict[str, "subprocess.Popen"] = {}
+_PROCS: dict[str, subprocess.Popen] = {}
 
 
 def _jobs_dir(settings: Settings) -> Path:

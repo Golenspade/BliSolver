@@ -24,11 +24,12 @@ from blisolver.config import Settings
 from blisolver.providers.base import Canonical
 from blisolver.schema import Segment
 from blisolver.subtitles import (
-    Acquisition,
     _acquire,
     _pick_tracks,
-    probe as subtitle_probe,
     track_language,
+)
+from blisolver.subtitles import (
+    probe as subtitle_probe,
 )
 
 CANONICAL = Canonical("bilibili.com", "BV1demo", 1, "https://www.bilibili.com/video/BV1demo")

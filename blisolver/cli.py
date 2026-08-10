@@ -289,10 +289,13 @@ def process_part(canonical: Canonical, settings: Settings, args) -> dict:
     )
     out = Path(out)  # write_bundle returns a Path; tolerate a str from a stubbed writer
     n = len(transcript.segments)
+    # Built outside the f-string: nesting the same quote character inside an f-string requires
+    # Python 3.12 (PEP 701), and pyproject declares >=3.11. Written inline, this module failed to
+    # parse on the declared minimum, making the whole CLI unimportable there.
+    ocr_note = "no OCR" if ocr_track is None else f"ocr={len(ocr_track)} cues"
     _log(
         f"[{canonical.id} p{canonical.part}] {transcript.source}: "
-        f"{n} segments, {len(frames)} frames, "
-        f"{"no OCR" if ocr_track is None else f"ocr={len(ocr_track)} cues"} -> {out}"
+        f"{n} segments, {len(frames)} frames, {ocr_note} -> {out}"
     )
     return {
         "platform": canonical.platform,
@@ -332,8 +335,8 @@ def _maybe_ocr(canonical, settings, args, transcript, *, log) -> list | None:
             f"(.ocr-venv or scripts/ocr_worker.py missing; Phase C setup)")
         return None
 
-    from .frames import download_video
     from .detect_hardsubs import detect_hardsubs
+    from .frames import download_video
     from .ocr import ocr_subtitle
 
     log(f"[{canonical.id} p{canonical.part}] OCR: preparing video...")

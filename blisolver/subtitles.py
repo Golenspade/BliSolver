@@ -50,7 +50,7 @@ def track_language(track_key: str | None) -> str | None:
     """
     if not track_key:
         return None
-    return track_key[3:] if track_key.startswith("ai-") else track_key
+    return track_key.removeprefix("ai-")
 
 
 # A caption track key is either `ai-<language>` or a bare language code. Anything else is not a

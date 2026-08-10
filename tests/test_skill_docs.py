@@ -24,7 +24,6 @@ What each test would have caught, historically:
 
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
 
@@ -114,7 +113,7 @@ def test_deprecated_flag_is_labelled_as_such(prose):
     _, surface = _cli_surface()
     assert "--scene-threshold" in surface["ingest"]
     window = "\n".join(l for l in prose.splitlines() if "--scene-threshold" in l)
-    assert re.search(r"deprecat|ignored", window, re.I), (
+    assert re.search(r"deprecat|ignored", window, re.IGNORECASE), (
         "--scene-threshold must be documented as deprecated/ignored"
     )
 
@@ -302,7 +301,7 @@ def test_no_doc_presents_the_old_output_path_as_an_instruction():
     Root contract documents are covered too. Scanning only `skills/` initially left the stale path
     in PROTOCOL.md, SPEC.md and CONTEXT.md, which is where it does the most damage.
     """
-    disowning = re.compile(r"broke|does not exist|not derivable|never|stopped|Do not", re.I)
+    disowning = re.compile(r"broke|does not exist|not derivable|never|stopped|Do not", re.IGNORECASE)
     offenders = []
     for path in [*DOCS, *ROOT_DOCS]:
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
@@ -329,7 +328,7 @@ def test_protocol_documents_the_frontmatter_keys_that_exist():
 
     from blisolver import merge
 
-    rendered = set(re.findall(r'^\s*"(\w+)":', inspect.getsource(merge.render_markdown), re.M))
+    rendered = set(re.findall(r'^\s*"(\w+)":', inspect.getsource(merge.render_markdown), re.MULTILINE))
     protocol = (PLUGIN_ROOT / "PROTOCOL.md").read_text(encoding="utf-8")
     # Keys whose absence would leave a reader unable to judge the transcript.
     load_bearing = {"transcript_language", "transcript_source", "original_language"}
@@ -444,18 +443,18 @@ def test_documented_schema_version_matches_the_code():
         f"docs never state the current schema version {SCHEMA_VERSION}"
     )
 
-    historical = re.compile(r"legacy|older|previous|pre-1|before|superseded|current bundles", re.I)
+    historical = re.compile(r"legacy|older|previous|pre-1|before|superseded|current bundles", re.IGNORECASE)
     offenders = []
     for path in DOCS:
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            for found in re.findall(r"schema[- ]?(\d+\.\d+)(?!\.\d)", line, re.I):
+            for found in re.findall(r"schema[- ]?(\d+\.\d+)(?!\.\d)", line, re.IGNORECASE):
                 if found != SCHEMA_VERSION and not historical.search(line):
                     offenders.append(f"{path.relative_to(SKILL)}:{number}: {line.strip()}")
             # A bare version next to "bundles"/"provenance" also counts as a schema claim.
             for found in re.findall(r"\b(\d+\.\d+)\b(?!\.\d)", line):
                 if (
                     found != SCHEMA_VERSION
-                    and re.search(r"bundle|provenance|contract", line, re.I)
+                    and re.search(r"bundle|provenance|contract", line, re.IGNORECASE)
                     and not historical.search(line)
                     and "1.0.0" not in line          # Agent Plugins spec version, not the schema
                 ):
