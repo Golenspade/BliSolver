@@ -58,5 +58,7 @@ Looked at, in order:
   \$PLUGIN_DATA/venv/bin/python       ${PLUGIN_DATA:+$PLUGIN_DATA/venv/bin/python}${PLUGIN_DATA:-<PLUGIN_DATA unset>}
   \$PLUGIN_ROOT/.venv/bin/python      $PLUGIN_ROOT/.venv/bin/python
   blisolver on PATH                  <not found>
-Create the environment once, then retry:
-  uv venv \"\$PLUGIN_ROOT/.venv\" && \"\$PLUGIN_ROOT/.venv/bin/python\" -m pip install -e \"\$PLUGIN_ROOT\"[mcp]"
+Create the environment once, with either:
+  uv venv \"\$PLUGIN_ROOT/.venv\" && uv pip install --python \"\$PLUGIN_ROOT/.venv/bin/python\" -e \"\$PLUGIN_ROOT[mcp]\"
+  python3 -m venv \"\$PLUGIN_ROOT/.venv\" && \"\$PLUGIN_ROOT/.venv/bin/pip\" install -e \"\$PLUGIN_ROOT[mcp]\"
+Note: 'uv venv' does not install pip into the environment, so 'python -m pip' will not work there."
