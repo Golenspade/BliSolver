@@ -144,13 +144,20 @@ bundles. A transcript cue carries `human-sub`/`auto-sub`/`whisper`; a burned-in 
 
 ### Reading language honestly
 
-`transcript.language` is the language of the delivered text. `original_language` is what the
-platform says was spoken. They can differ: bilibili's Chinese ASR track is sometimes returned
-redacted, and acquisition then falls through to a foreign-language track. `source_reason` says
-`language proxy` when that happened and names the rejected track and the marker that triggered it.
+`transcript.language` is the language of the delivered text, and `bundle.md` carries it as
+`transcript_language`. They can differ from the video's actual language: bilibili's Chinese ASR
+track is sometimes returned redacted, and acquisition then falls through to a foreign-language
+track.
 
-Compare the two fields before treating transcript text as the speaker's own words. `Transcript
-.source` describes *how* the text was produced, never *what language it is in*.
+**`source_reason` is the authoritative signal.** It says `language proxy` when that happened, names
+the rejected track, and names the marker that triggered rejection. Read it first.
+
+`original_language` is a weaker cross-check than it looks. For bilibili the provider sets it to `zh`
+unconditionally — the view API reports no spoken language and nothing else measures one — so it is a
+platform default, not an observation. It is therefore wrong on an English-language bilibili upload,
+and a comparison against it will miss a proxy on any video the default already mismatched.
+
+`Transcript.source` describes *how* the text was produced, never *what language it is in*.
 
 ## Optional track semantics
 

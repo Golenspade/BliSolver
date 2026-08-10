@@ -114,7 +114,9 @@ uv venv .ocr-venv
 - ASR 后端是通过 `whisper-cli` 调用的 whisper.cpp。`pyproject.toml` 里 `transcribe` 可选依赖组仍列着
   faster-whisper 和 CUDA wheel，那是历史遗留，已不生效。
 - **交付的字幕可能不是视频的原语言。** B 站有时会返回被删改的中文 ASR 轨，此时管道会向下回退到外语轨。
-  请比较 `transcript.language` 与 `original_language`，并在 `source_reason` 中查看 `language proxy`。
+  请读 `source_reason` 里的 `language proxy` —— 它会指明被弃的轨道和触发的标记。`bundle.md` 的
+  `transcript_language` 告诉你实际收到的是什么语言；`original_language` 对 B 站是平台默认值 `zh`，
+  不是探测结果，不能当判据。
 - 视觉、OCR、弹幕、互动弹幕都是可选阶段，各有独立的外部依赖。
 
 ## 📂 目录结构

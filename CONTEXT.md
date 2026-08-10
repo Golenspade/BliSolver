@@ -7,7 +7,7 @@ what each term *means* as a domain fact, not how it's implemented (mechanisms li
 ## Established tracks (anchors)
 
 **Bundle**:
-The self-contained per-part deliverable blisolver emits (`out/<id>-p<part>/`). Everything below is
+The self-contained per-part deliverable blisolver emits (`out/<sanitized_title> [<id>-p<part>]/`). Everything below is
 either already in the bundle or a candidate to add to it.
 
 **Transcript**:

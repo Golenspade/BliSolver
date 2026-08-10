@@ -18,7 +18,7 @@ supported source, it produces a timeline-aligned, self-contained **bundle**:
 - an **original-language transcript** (reuse trustworthy captions, else faster-whisper), and
 - **per-frame visual notes** (OCR + figure/slide captions via a local vision model).
 
-The tool **starts** at a URL and **ends** at `out/<id>-p<part>/` (`bundle.md` + `bundle.json` +
+The tool **starts** at a URL and **ends** at `out/<sanitized_title> [<id>-p<part>]/` (`bundle.md` + `bundle.json` +
 `frames/`). It does **not** summarize or extract entities — that judgment lives downstream in Atlas.
 Keep this seam clean: blisolver is a deterministic batch unit; everything interpretive happens
 elsewhere.
@@ -245,7 +245,7 @@ no-captions baseline → `whisper`.
   confident, well-formed, hallucinated captions while every health check passes. At vision-stage start
   hash the loaded-model metadata; on change, render a PNG with a random nonce and require the model to
   read it back. Fail → hard-stop, loud error. Never degrade to silent caption-less frames.
-- **Delivered bundle = self-contained `out/<id>-p<part>/`.** Frame PNGs ship for *your* QA/reprocessing
+- **Delivered bundle = self-contained `out/<sanitized_title> [<id>-p<part>]/`.** Frame PNGs ship for *your* QA/reprocessing
   (Atlas reads only the markdown text); `--no-frame-images` omits them (JSON keeps phash/ts/caption).
   `cache/` holds expensive intermediates (raw audio, pre-dedup frames), gitignored.
 - **Auth is per-provider `auth_opts()`.** bilibili: cookies effectively required — default

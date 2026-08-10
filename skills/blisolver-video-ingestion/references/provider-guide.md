@@ -45,9 +45,12 @@ When the accepted track is not Chinese, three things hold and you should check a
 
 * `transcript.language` is the language actually delivered, derived from the track key. The `ai-`
   prefix records how a track was produced, not what language it holds, so `ai-en` reports `en`.
-* `original_language` still reports what the platform says was spoken.
+  `bundle.md` carries the same value as `transcript_language`.
 * `transcript.source_reason` contains `language proxy`, names the rejected track, and names the
-  marker.
+  marker. This is the signal to trust.
+* `original_language` reports `zh` for every bilibili video. The provider sets it unconditionally
+  because the view API reports no spoken language, so it is a platform default rather than a
+  measurement — useful as corroboration, not as a test.
 
 Treating a language-proxy transcript as the speaker's own words is a category error: the text is a
 machine translation of the audio produced by the platform, sitting in the `auto-sub` authority tier.

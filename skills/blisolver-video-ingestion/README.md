@@ -118,8 +118,10 @@ or cookie text into a command line, a URL, a log, or `mcp.json` — Agent Plugin
 - The ASR backend is whisper.cpp via `whisper-cli`. The `transcribe` optional-dependency group in
   `pyproject.toml` still lists faster-whisper and CUDA wheels; it is vestigial.
 - A delivered transcript may not be in the video's original language. bilibili sometimes returns its
-  Chinese ASR track redacted, and acquisition falls through to a foreign-language track. Compare
-  `transcript.language` with `original_language` and read `source_reason` for `language proxy`.
+  Chinese ASR track redacted, and acquisition falls through to a foreign-language track. Read
+  `source_reason` for `language proxy` — it names the rejected track and the marker. `bundle.md`'s
+  `transcript_language` tells you what you received; `original_language` is a platform default for
+  bilibili, not a measurement.
 - Vision, OCR, danmaku, and interactions are optional stages with separate external requirements.
 
 ## 📂 Layout

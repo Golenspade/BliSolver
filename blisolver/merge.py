@@ -145,6 +145,19 @@ def build_bundle(
     )
 
 
+def _describe_source(transcript) -> str:
+    """`transcript_source` for the frontmatter: the source plus its decision reason.
+
+    PROTOCOL.md defines this key as carrying both, so the shape stays. What it no longer does is
+    repeat the source: provider reasons already begin with it, which rendered as
+    `auto-sub (auto-sub (quality-gate: passed))`.
+    """
+    source, reason = transcript.source, transcript.source_reason
+    if not reason:
+        return source
+    return reason if reason.startswith(source) else f"{source} ({reason})"
+
+
 def render_markdown(bundle: Bundle, settings: Settings) -> str:
     t = bundle.transcript
     dur = _mmss(bundle.duration_s) if bundle.duration_s else "?"
@@ -162,7 +175,13 @@ def render_markdown(bundle: Bundle, settings: Settings) -> str:
         "fetched_at": bundle.fetched_at,
         "original_language": bundle.original_language or "",
         "available_subtitles": [f"{s.code} ({s.source})" for s in bundle.available_subtitles],
-        "transcript_source": f"{t.source} ({t.source_reason})",
+        # The language of the text below, which is not necessarily `original_language`. Its absence
+        # here was the worst of the provenance gaps: a bundle carrying 31k characters of
+        # machine-translated English sat under `original_language: zh` with no field anywhere in
+        # this file stating what language the transcript was in, so a reader had nothing to
+        # contradict the assumption that it was the original.
+        "transcript_language": t.language or "",
+        "transcript_source": _describe_source(t),
         "vision_model": bundle.meta.vision_model or "none",
         "tool_version": bundle.meta.tool_version,
     }

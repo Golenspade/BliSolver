@@ -21,7 +21,13 @@ from ..player_api import (
 )
 from ..quality import describe_failure, evaluate
 from ..resolve import resolve as _resolve
-from ..subtitles import extract_info, fetch_subtitle_segments, track_language, ydl_opts
+from ..subtitles import (
+    classify_track,
+    extract_info,
+    fetch_subtitle_segments,
+    track_language,
+    ydl_opts,
+)
 from ..subtitles import probe as subtitle_probe
 from .base import Canonical, SourceMetadata, SubtitleOutcome, register
 
@@ -57,7 +63,9 @@ class BilibiliProvider:
             info = extract_info(canonical.url, settings)
             sub_dict = info.get("subtitles") or {}
             for k in sub_dict:
-                source = "auto-sub" if k.startswith("ai-") else "human-sub"
+                source = classify_track(k)
+                if source is None:
+                    continue  # not a caption (e.g. bilibili's `danmaku` overlay track)
                 subs.append({"code": k, "source": source, "title": k})
         except Exception:
             pass
@@ -74,6 +82,15 @@ class BilibiliProvider:
             parts=max(len(view.pages), 1),
             part_durations_s=[pg.duration for pg in view.pages],
             thumbnail_url=view.pic,
+            # PLATFORM ASSUMPTION, NOT AN OBSERVATION. bilibili's view API reports no spoken
+            # language, and nothing else here measures one, so `zh` is a default for a
+            # predominantly Chinese-language platform rather than something detected from this
+            # video. Two consequences worth knowing:
+            #   * a Chinese-language field on an English-language bilibili upload is expected here;
+            #   * comparing this against `Transcript.language` is a heuristic for spotting a
+            #     cross-language fallback, not a reliable test. `Transcript.source_reason` states
+            #     `language proxy` outright when the fallback fired, and that is the signal to
+            #     trust — see subtitles.Acquisition.describe_fallback.
             original_language="zh" if canonical.platform == "bilibili.com" else None,
             available_subtitles=subs,
             view_count=view.view_count,

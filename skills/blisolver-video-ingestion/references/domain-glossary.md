@@ -35,9 +35,13 @@ An acquisition outcome where the original-language track was rejected and a diff
 in for it. On bilibili this happens when the Chinese ASR track comes back with redactions: the
 pipeline falls through to a foreign-language ASR track.
 
-Three fields together describe it: `transcript.language` (what was delivered), `original_language`
-(what was spoken), and `transcript.source_reason` (which contains `language proxy`, names the
-rejected track, and names the marker that triggered rejection).
+Three fields together describe it: `transcript.language` (what was delivered, rendered in
+`bundle.md` as `transcript_language`), `transcript.source_reason` (which contains `language proxy`,
+names the rejected track, and names the marker that triggered rejection), and `original_language`.
+
+`source_reason` is the reliable one. `original_language` is a platform default for bilibili rather
+than a measurement, so treat a mismatch as corroboration and never treat a match as proof there was
+no substitution.
 
 A language-proxy transcript is a platform machine translation of the audio. It sits in the `auto-sub`
 tier and is not the speaker's words. Compare the two language fields before quoting.

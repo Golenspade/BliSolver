@@ -284,19 +284,57 @@ def test_documented_output_template_matches_the_writer(prose):
     )
 
 
+# Contract documents at the plugin root. PROTOCOL.md is what Atlas codes against, so a stale claim
+# there outranks one in the skill: the skill misleads a reader, PROTOCOL.md misleads an implementer.
+ROOT_DOCS = [
+    PLUGIN_ROOT / name
+    for name in ("PROTOCOL.md", "SPEC.md", "CONTEXT.md", "README.md", "README_zh.md")
+    if (PLUGIN_ROOT / name).is_file()
+]
+
+
 def test_no_doc_presents_the_old_output_path_as_an_instruction():
     """`out/<id>-p<part>/` may only appear while being disowned.
 
     It is worth naming as a pitfall — consumers really did derive it — but a line that presents it
     as where to look is the exact regression this suite exists to stop.
+
+    Root contract documents are covered too. Scanning only `skills/` initially left the stale path
+    in PROTOCOL.md, SPEC.md and CONTEXT.md, which is where it does the most damage.
     """
     disowning = re.compile(r"broke|does not exist|not derivable|never|stopped|Do not", re.I)
     offenders = []
-    for path in DOCS:
+    for path in [*DOCS, *ROOT_DOCS]:
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            if "out/<id>-p<part>" in line and not disowning.search(line):
-                offenders.append(f"{path.relative_to(SKILL)}:{number}: {line.strip()}")
+            if re.search(r"out/<id>-p<part>|out/<id>-p\{", line) and not disowning.search(line):
+                offenders.append(f"{path.relative_to(PLUGIN_ROOT)}:{number}: {line.strip()}")
     assert not offenders, "old output path presented as guidance:\n" + "\n".join(offenders)
+
+
+def test_contract_documents_describe_the_real_delivery_directory():
+    """PROTOCOL.md is the Atlas-facing contract; it must name the directory shape that is produced."""
+    protocol = (PLUGIN_ROOT / "PROTOCOL.md").read_text(encoding="utf-8")
+    assert "[<id>-p<part>]" in protocol, (
+        "PROTOCOL.md does not describe the bracketed delivery directory Atlas will encounter"
+    )
+
+
+def test_protocol_documents_the_frontmatter_keys_that_exist():
+    """The frontmatter provenance list in PROTOCOL.md must not omit a key the renderer emits.
+
+    A bundle carrying machine-translated English shipped with no language field on the page at all;
+    the list is what an Atlas implementer reads to know what to look for.
+    """
+    import inspect
+
+    from blisolver import merge
+
+    rendered = set(re.findall(r'^\s*"(\w+)":', inspect.getsource(merge.render_markdown), re.M))
+    protocol = (PLUGIN_ROOT / "PROTOCOL.md").read_text(encoding="utf-8")
+    # Keys whose absence would leave a reader unable to judge the transcript.
+    load_bearing = {"transcript_language", "transcript_source", "original_language"}
+    missing = sorted(k for k in load_bearing & rendered if k not in protocol)
+    assert not missing, f"PROTOCOL.md omits frontmatter keys the renderer emits: {missing}"
 
 
 # --- scripts and references ----------------------------------------------------------------

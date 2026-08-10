@@ -11,7 +11,7 @@ generalized (see §Changes-from-bili-tool at the end).
 ## CLI verbs
 
 ```bash
-blisolver ingest <url> [flags]   # full pipeline -> out/<id>-p<part>/ bundle
+blisolver ingest <url> [flags]   # full pipeline -> a bundle directory (path reported by --json)
 blisolver probe  <url>           # cheap pre-flight metadata only, no media
 ```
 
@@ -115,12 +115,22 @@ probe data for this URL."
 
 ## `ingest` — bundle output
 
-Output is `out/<id>-p<part>/` containing `bundle.md`, `bundle.json`, and `frames/`.
+Output is `out/<sanitized_title> [<id>-p<part>]/` containing `bundle.md`, `bundle.json`, and
+`frames/`. The directory name carries the sanitized video title, so **it is not derivable from
+`{platform, id, part}`** — it falls back to `<id>-p<part>` only when the title is empty. Take the
+path from `ingest --json`, which reports absolute `bundle_dir`, `bundle_json`, and `bundle_md` per
+part, rather than reconstructing it.
 
 - **`bundle.md` is the primary ingestion surface** — Atlas reads this prose. It opens with a
   frontmatter header carrying provenance (platform, id, url, title, uploader, `published_at`,
-  `transcript_source` + decision reason, vision model, tool version), then slide-chunked
-  transcript + visual notes.
+  `original_language`, `available_subtitles`, `transcript_language`, `transcript_source` + decision
+  reason, vision model, tool version), then slide-chunked transcript + visual notes.
+
+  `transcript_language` is the language of the delivered text and is **not** necessarily
+  `original_language`: when a redacted original-language track forces a cross-language fallback,
+  `transcript_source` carries `language proxy` plus the rejected track. For bilibili,
+  `original_language` is a platform default of `zh` rather than a measurement, so `transcript_source`
+  is the authoritative signal.
 - **`bundle.json` is the precise backing record** — same facts, structured. Mirrors `ProbeResult`'s
   metadata fields plus:
 

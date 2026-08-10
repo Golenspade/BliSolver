@@ -192,8 +192,11 @@ a runtime dependency of `--ocr`, not an entry point.
   cost; `--force-whisper` is the override. Provenance stays visible in `Transcript.source_reason`.
 * A delivered transcript may not be in the video's original language. bilibili's Chinese ASR track
   is sometimes returned redacted, and the pipeline then falls through to a foreign-language track.
-  When that happens `source_reason` says `language proxy` and `transcript.language` differs from
-  `original_language`. Compare those two before treating text as the speaker's own words.
+  When that happens `source_reason` says `language proxy` and names both the rejected track and the
+  marker that triggered rejection. **Read `source_reason`** — it is the direct signal.
+  `transcript.language` and `bundle.md`'s `transcript_language` tell you what you actually received.
+  `original_language` is a weaker cross-check: for bilibili it is a platform default of `zh`, not a
+  measurement, so it is wrong on an English-language bilibili upload.
 * OCR is an independent burned-in-subtitle timeline, not a replacement for the picked transcript.
   `Frame.ocr` is sparse slide/UI text and a different thing again.
 * Danmaku and interactions are lower-authority audience signals. A danmaku author flag is an

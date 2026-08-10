@@ -53,6 +53,25 @@ def track_language(track_key: str | None) -> str | None:
     return track_key[3:] if track_key.startswith("ai-") else track_key
 
 
+# A caption track key is either `ai-<language>` or a bare language code. Anything else is not a
+# caption: bilibili's extractor also exposes the scrolling-comment overlay under the key `danmaku`,
+# which has no transcript meaning and is acquired through `--danmaku` instead.
+_LANGUAGE_CODE = re.compile(r"^[a-z]{2,3}(?:-[A-Za-z]{2,8})*$")
+
+
+def classify_track(track_key: str) -> str | None:
+    """Return the provenance of a subtitle track key, or None when it is not a caption at all.
+
+    Used to describe *availability*. The previous rule was "anything not prefixed `ai-` is
+    human-sub", which labelled bilibili's `danmaku` overlay as a human-authored caption — the
+    highest authority tier — so a consumer reading `available_subtitles` was told a human Chinese
+    caption existed when none did.
+    """
+    if track_key.startswith("ai-"):
+        return "auto-sub" if _LANGUAGE_CODE.match(track_key[3:]) else None
+    return "human-sub" if _LANGUAGE_CODE.match(track_key) else None
+
+
 @dataclass
 class Acquisition:
     """A chosen subtitle track plus the tracks that were passed over to reach it.
