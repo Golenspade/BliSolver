@@ -7,7 +7,7 @@ import json
 import sys
 from pathlib import Path
 
-from _common import bundle_json_path, safe_child_path
+from _runtime import bundle_json_path, safe_child_path
 
 
 def _read_bundle(value: str) -> tuple[Path, Path, dict]:

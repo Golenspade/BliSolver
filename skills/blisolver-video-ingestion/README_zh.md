@@ -1,6 +1,6 @@
 <div align="center">
-  <img src="https://capsule-render.vercel.app/api?type=waving&color=timeGradient&height=250&section=header&text=BliSolver&fontSize=90&animation=fadeIn&fontAlignY=38&desc=%E4%BE%BF%E6%90%BA%E5%BC%8FAgent%20Skill&descAlignY=55&descAlign=50" alt="Skill Banner">
-  <p><strong>用于操作 BliSolver <code>harvest</code> 视频摄取管道的便携式 Agent Skill。</strong></p>
+  <img src="https://capsule-render.vercel.app/api?type=waving&color=timeGradient&height=250&section=header&text=BliSolver&fontSize=90&animation=fadeIn&fontAlignY=38&desc=%E8%A7%86%E9%A2%91%E6%91%84%E5%8F%96%20Agent%20Skill&descAlignY=55&descAlign=50" alt="Skill Banner">
+  <p><strong>用于操作 BliSolver <code>blisolver</code> 视频摄取管道的 Agent Skill。</strong></p>
   <p>
     <a href="README.md">English</a> | <a href="README_zh.md">简体中文</a>
   </p>
@@ -8,122 +8,128 @@
 
 ---
 
-此 Skill 指导兼容的编程代码 Agent (Coding Agents) 如何进行以下操作：
+本目录是 BliSolver [Agent Plugin](https://agent-plugins.org) 中的一个 Skill。它教会兼容的 Agent：
 
-- 🔍 **探测与摄取 (Probe and ingest)** 公开的 bilibili.com 和 YouTube 视频
-- 📝 **智能决策 (Choose)** 选择平台自带字幕，或降级使用本地 Whisper 离线转录
-- 🩺 **环境诊断 (Diagnose)** 检查 ffmpeg、JavaScript 运行时、whisper.cpp、LM Studio、OCR 及授权配置
-- 🔬 **校验与阅读 (Inspect and validate)** 检查产出的 Atlas 兼容 Schema 1.1 格式的 Bundle 数据包
-- 🧠 **理解溯源 (Understand)** 掌握字幕、视觉笔记、OCR、弹幕及互动数据的来源可信度
+- 🩺 **离线诊断** 在花钱处理媒体之前先跑 `blisolver doctor`
+- 🔍 **廉价探测** bilibili.com 与 YouTube 的元数据，不下载任何媒体
+- 📝 **执行摄取** 并读回它实际写入的准确路径
+- 🧠 **理解溯源** 字幕、视觉笔记、OCR、弹幕与互动数据的可信度层级
+- 🔬 **检查与校验** schema 1.1 数据包
 
-> **注意：** Harvest 是一个数据的摄取前门 (ingestion front-door)，它本身不是总结器或实体提取器。
+> **注意：** BliSolver 是数据摄取的前门，本身不做总结，也不做实体提取。
 
-## 📦 安装
+## 📦 打包方式
 
-### 推荐方式：为所有支持的 Agent 安装
+仓库根目录即 plugin root，所以 Skill 与它所驱动的应用并存于同一棵树：
 
-```bash
-npx skills add alttina/bilibili-get-content \
-  --global \
-  --agent '*' \
-  --yes
+```text
+<plugin-root>/
+├── plugin.json                 # Agent Plugins 1.0.0 清单
+├── mcp.json                    # stdio MCP 服务声明
+├── bin/blisolver-mcp           # 负责解析可用解释器的启动器
+├── blisolver/                  # 本 Skill 驱动的应用
+└── skills/
+    └── blisolver-video-ingestion/     ← 你在这里
+        ├── SKILL.md
+        ├── references/
+        └── scripts/
 ```
 
-**仅为单一 Agent 安装：**
+符合规范的 Agent Plugins 客户端会读取 `plugin.json`，从固定位置 `skills/` 发现本 Skill，并从
+`mcp.json` 读取 MCP 服务配置。安装方式是把这个 plugin 目录交给你的客户端 —— clone 仓库，或复制到客户端
+加载 plugin 的目录下。具体命令由各客户端自行定义，不在此处记录。
 
-```bash
-npx skills add alttina/bilibili-get-content \
-  --global \
-  --agent codex \
-  --yes
-```
+Skill 包**刻意不**内置 Python 环境、模型、媒体、缓存或任何密钥。它只提供指令和三个脚本。
 
-您可以将 `codex` 替换为 `claude-code`、`cursor`、`github-copilot` 或其他受支持的 Agent。如需项目级本地安装，请移除 `--global` 参数。
+## 🚀 使用
 
-在 [`for_agents_download.md`](for_agents_download.md) 中提供了一键复制/粘贴的快速安装命令。
+可以这样让 Agent 干活：
 
-## 🚀 使用方法
+> *"探测这个 B 站链接，然后在不启用视觉的情况下摄取它，并校验产出的 bundle。"*
 
-安装完成后，您可以直接对 Agent 下达类似如下的指令：
-
-> *"Probe this bilibili URL, then ingest it without vision and validate the resulting bundle."*
-> （探测这个 Bilibili URL，然后无视觉摄取它，并验证生成的 bundle 数据包。）
-
-此 Skill 提供给 Agent 的公开包装器脚本有：
+对外公开的脚本：
 
 | 脚本 | 用途 |
 |---|---|
-| `scripts/doctor.py` | 离线运行时与依赖环境诊断报告 |
-| `scripts/probe.py` | JSON 安全的 `harvest probe` (探针) 包装器 |
-| `scripts/ingest.py` | 安全的 `harvest ingest` (摄取) 包装器，支持干跑 (dry-run) |
-| `scripts/inspect_bundle.py` | 本地数据包 (bundle) 内容摘要输出 |
-| `scripts/validate_bundle.py` | Schema 1.1 数据结构及产物校验 |
+| `scripts/blisolver_cli.py` | 用装有 BliSolver 依赖的解释器运行 CLI，并原样转发全部参数 |
+| `scripts/inspect_bundle.py` | Bundle 摘要 —— 只报数量与身份信息，绝不输出正文 |
+| `scripts/validate_bundle.py` | 依据实时 schema 与产物校验 bundle |
 
-这些包装脚本会通过 `--project-root`、`HARVEST_PROJECT_ROOT` 环境变量、上级目录，或者系统中已安装的 `harvest` 命令来定位 BliSolver 的核心代码。它们本身并不包含 harvest 主程序。
+`scripts/blisolver_cli.py` 是**直通**而非适配器：它不重复声明 CLI 的任何 flag，因此不可能落后于 CLI。
+解释器解析顺序为 `$BLISOLVER_PYTHON`、`$PLUGIN_DATA/venv/bin/python`、
+`<plugin-root>/.venv/bin/python`，最后是 PATH 上已安装的 `blisolver`；它**绝不**回退到恰好启动它的那个
+`python3`。
+
+```bash
+S=skills/blisolver-video-ingestion/scripts
+
+python3 "$S/blisolver_cli.py" doctor                       # 离线预检
+python3 "$S/blisolver_cli.py" probe 'https://...'           # stdout 上一个 JSON 对象
+python3 "$S/blisolver_cli.py" --show-command ingest 'https://...'   # 只预览命令，不执行
+python3 "$S/blisolver_cli.py" ingest 'https://...' --json   # 执行；从 envelope 里读路径
+```
 
 ## ⚙️ 运行时要求
 
-此 Skill 安装包是完全便携的，但媒体处理依赖于您的目标执行环境：
+指令本身是可移植的，但媒体处理依赖目标机器：
 
-- Python 3.11+;
-- 一份完整的 BliSolver 源码或已安装在系统内的 `harvest` 命令;
-- 用于音视频处理阶段的 ffmpeg;
-- 用于本地转录降级的 `whisper-cli` 及其 GGML 模型;
-- 用于可靠提取 YouTube 内容的 deno 或 node 运行时;
-- 用于画面视觉标注的 LM Studio（需配置好视觉模型和相应的 projector）;
-- 仅当需要硬字幕 OCR 时，才需要独立的 `.ocr-venv` 工作环境。
+- Python 3.11+，以及一个装有 BliSolver 依赖的 Python 环境
+- ffmpeg —— 每个媒体阶段都要调用它
+- `whisper-cli` **和** 一份 GGML 模型 —— 这是两件独立的事，`doctor` 会分别检查
+- deno 或 node —— yt-dlp 需要其中之一来驱动 YouTube 真正的 web player 客户端
+- LM Studio 及视觉模型**和它的 projector** —— 仅帧画面描述需要
+- 独立的 `.ocr-venv` —— 仅硬字幕 OCR 需要
+- `BLISOLVER_DANMAKU_MODEL` 里的 LM Studio 模型 id —— 仅 `--danmaku` 需要
 
-数据源提供商的授权凭据 (Credentials) 应保存在目标环境中或浏览器配置内。**严禁**将 Cookies、API 密钥或 `SESSDATA` 放在命令行参数、URL、README 文件或日志中打印。
+不要靠猜，直接跑 `blisolver doctor`：每一项检查都标注了它把守的管道阶段，所以一条 warning 会告诉你**具体
+哪个能力不可用**，而不是"哪里有问题"。
 
-## 🛠️ 本地模型与沙箱配置 (Model Setup)
+## 🛠️ 模型配置
 
-BliSolver 采用 100% 本地运行策略以确保隐私并避免高昂的 API 成本开销。在首次运行视频解析前，请务必完成以下模型和环境的下载与配置：
+**Whisper 权重** —— 当没有可信字幕可用时需要：
 
-**1. Whisper ASR 语音模型**  
-当视频没有官方提供的字幕时，系统需要回退到本地进行 AI 听写。请使用以下命令下载 1.5GB 的 GGML 模型到默认路径：
 ```bash
-curl -sL -o /tmp/ggml-medium.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin
+curl -sL -o /tmp/ggml-medium.bin \
+  https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin
 ```
-*(你可以通过设置 `BLISOLVER_WHISPER_MODEL` 环境变量来更改模型的存放路径)。*
 
-**2. 隔离的 OCR 沙箱环境**  
-只有在运行带有 `--ocr` 参数的命令时才需要此项配置。为了避免沉重的视觉处理框架（如 OpenCV 和 ONNX）污染主工程依赖，BliSolver 要求 OCR 引擎运行在独立的虚拟环境中，请在项目根目录下执行：
+`/tmp` 会在重启后被清空。想长期保留请把 `BLISOLVER_WHISPER_MODEL` 指向持久路径。
+
+**OCR 沙箱** —— 仅 `--ocr` 需要。保持隔离是为了让 RapidOCR 与 OpenCV 永不进入应用环境：
+
 ```bash
 uv venv .ocr-venv
 .ocr-venv/bin/pip install rapidocr-onnxruntime opencv-python
 ```
 
-## 🔄 更新与卸载
+## 🔐 凭据
 
-**更新已安装的 skill：**
-```bash
-npx skills update harvest-video-ingestion
-```
+数据源凭据应放在环境变量或 `.env` 中。**严禁**把 `SESSDATA`、`LMSTUDIO_API_KEY` 或 cookie 内容写进命令
+行参数、URL、日志或 `mcp.json` —— Agent Plugins 规范明确把配置里的 `env` 值视为可见的包数据，而
+`mcp.json` 是要提交进仓库的。
 
-**移除已安装的 skill：**
-```bash
-npx skills remove harvest-video-ingestion
-```
+## ⚠️ 当前限制
 
-## ⚠️ 当前已知限制
+- `bilibili.tv` 处于延后状态，会被显式报错拒绝。
+- ASR 后端是通过 `whisper-cli` 调用的 whisper.cpp。`pyproject.toml` 里 `transcribe` 可选依赖组仍列着
+  faster-whisper 和 CUDA wheel，那是历史遗留，已不生效。
+- **交付的字幕可能不是视频的原语言。** B 站有时会返回被删改的中文 ASR 轨，此时管道会向下回退到外语轨。
+  请比较 `transcript.language` 与 `original_language`，并在 `source_reason` 中查看 `language proxy`。
+- 视觉、OCR、弹幕、互动弹幕都是可选阶段，各有独立的外部依赖。
 
-- `bilibili.tv` 目前被延期支持并会有意拒绝处理。
-- 当前的 ASR (语音识别) 后端是 `whisper-cli`/whisper.cpp；文档中较老的关于 faster-whisper/CUDA 的引用仅作为历史遗留参考，若与当前源码冲突，以当前源码为准。
-- 视觉 (Vision)、OCR、弹幕 (danmaku) 以及互动投票 (command-danmaku) 均为可选阶段，需满足独立的外部依赖要求。
-
-## 📂 仓库结构
+## 📂 目录结构
 
 ```text
-SKILL.md                    # 必需的 Agent Skills 清单与行为规范指令
-scripts/                    # 公开的包装器脚本与一个内部帮助类
-references/                 # 渐进式展开的详细运维与架构文档
-LICENSE.txt                 # MIT 开源协议
-README.md                   # 面向人类用户的安装指南
-for_agents_download.md      # 用于复制/粘贴的快速安装命令
+SKILL.md                  # Agent Skills 清单与指令
+scripts/                  # 三个公开脚本 + 一个内部 helper
+references/               # 渐进式披露文档
+LICENSE.txt               # MIT
+README.md / README_zh.md  # 本指南
 ```
 
-## 📜 标准与开源协议
+## 📜 标准与许可
 
+- [Agent Plugins 规范](https://agent-plugins.org/specification)
 - [Agent Skills 规范](https://agentskills.io/specification)
-- [`npx skills` 安装器](https://github.com/vercel-labs/skills)
-- **MIT 开源协议。** 详情请见 [`LICENSE.txt`](LICENSE.txt)。
+- [Model Context Protocol](https://modelcontextprotocol.io/specification)
+- **MIT License.** 见 [`LICENSE.txt`](LICENSE.txt)。

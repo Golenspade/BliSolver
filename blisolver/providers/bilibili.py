@@ -21,7 +21,7 @@ from ..player_api import (
 )
 from ..quality import describe_failure, evaluate
 from ..resolve import resolve as _resolve
-from ..subtitles import extract_info, fetch_subtitle_segments, ydl_opts
+from ..subtitles import extract_info, fetch_subtitle_segments, track_language, ydl_opts
 from ..subtitles import probe as subtitle_probe
 from .base import Canonical, SourceMetadata, SubtitleOutcome, register
 
@@ -114,9 +114,19 @@ class BilibiliProvider:
             return None
 
     def fetch_subtitle(self, canonical, settings, meta, *, pinned_lang=None, opener=None):
-        """Full bilibili trust decision → SubtitleOutcome. `pinned_lang` is unused (bilibili is
-        zh-only; --lang only affects the Whisper fallback language in the CLI). A rejected outcome
-        still carries source_reason (+ the failed quality_gate) so the bundle records why."""
+        """Full bilibili trust decision → SubtitleOutcome.
+
+        `pinned_lang` is not honoured for track selection here: the candidate order is fixed by
+        `subtitles._pick_tracks` (human zh, then ai-zh, then the foreign ASR fallbacks). The CLI
+        warns when `--lang` is passed for a bilibili URL so the flag is not silently swallowed.
+
+        A rejected outcome still carries source_reason (+ the failed quality_gate) so the bundle
+        records why. An accepted outcome reports the language it actually delivered: this used to be
+        hardcoded to "zh", which meant a video whose Chinese track was rejected in favour of the
+        English ASR track was recorded as Chinese while carrying English text. `Bundle
+        .original_language` stays the video's spoken language, so a consumer can now detect the
+        substitution by comparing the two.
+        """
         info = extract_info(canonical.url, settings)
         view = self._view(canonical, settings, opener=opener)
         sub = subtitle_probe(
@@ -133,10 +143,11 @@ class BilibiliProvider:
         gate = evaluate(sub.segments, float(info.get("duration") or 0), settings.quality,
                        source=sub.source, lang_key=sub.lang)
         if gate.passed:
+            # sub.reason already names the delivered track and any cross-language detour.
             return SubtitleOutcome(
                 accepted=True, source=sub.source,
-                source_reason=f"{sub.source} (quality-gate: passed)",
-                language="zh", segments=sub.segments, quality_gate=gate,
+                source_reason=f"{sub.reason} (quality-gate: passed)",
+                language=track_language(sub.lang), segments=sub.segments, quality_gate=gate,
             )
         return SubtitleOutcome(
             accepted=False, source=None,

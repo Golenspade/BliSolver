@@ -1,0 +1,62 @@
+#!/bin/sh
+# Agent Plugins stdio launcher for the BliSolver MCP server.
+#
+# Why this file exists: Agent Plugins 1.0.0 §7.2.1 requires `command` to be ONE executable token
+# and forbids placeholder expansion inside it, so `mcp.json` cannot name an interpreter such as
+# ${PLUGIN_DATA}/venv/bin/python. This script IS that token. It resolves the Python that actually
+# has blisolver's dependencies installed, then execs the server.
+#
+# Environment contract (§9.1): a conformant client guarantees PLUGIN_ROOT and PLUGIN_DATA in this
+# process's environment. Both are derived from this script's own location when it is run by hand
+# outside a client, so the launcher stays usable for local debugging.
+#
+# stdio transport discipline: stdout carries JSON-RPC only. Every diagnostic here goes to stderr.
+
+set -eu
+
+if [ -z "${PLUGIN_ROOT:-}" ]; then
+    PLUGIN_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
+    export PLUGIN_ROOT
+fi
+
+die() {
+    printf '%s\n' "blisolver-mcp: $1" >&2
+    exit 1
+}
+
+# Interpreter resolution, most explicit first. PLUGIN_DATA is the spec's prescribed home for a
+# virtual environment (§9.1 names virtual environments as a PLUGIN_DATA use case) because it
+# survives plugin updates; PLUGIN_ROOT/.venv is the developer-checkout case.
+PY=""
+for candidate in \
+    "${BLISOLVER_PYTHON:-}" \
+    "${PLUGIN_DATA:+$PLUGIN_DATA/venv/bin/python}" \
+    "$PLUGIN_ROOT/.venv/bin/python"
+do
+    if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+        PY="$candidate"
+        break
+    fi
+done
+
+if [ -n "$PY" ]; then
+    # PYTHONPATH lets a non-editable virtual environment still import the bundled package.
+    PYTHONPATH="$PLUGIN_ROOT${PYTHONPATH:+:$PYTHONPATH}"
+    export PYTHONPATH
+    exec "$PY" -m blisolver.cli mcp
+fi
+
+# Last resort: an installed console script on PATH. Bare-command PATH behavior is client-defined
+# (§7.2.1), so this is a convenience, never something the package depends on.
+if command -v blisolver >/dev/null 2>&1; then
+    exec blisolver mcp
+fi
+
+die "no usable Python found.
+Looked at, in order:
+  \$BLISOLVER_PYTHON                  ${BLISOLVER_PYTHON:-<unset>}
+  \$PLUGIN_DATA/venv/bin/python       ${PLUGIN_DATA:+$PLUGIN_DATA/venv/bin/python}${PLUGIN_DATA:-<PLUGIN_DATA unset>}
+  \$PLUGIN_ROOT/.venv/bin/python      $PLUGIN_ROOT/.venv/bin/python
+  blisolver on PATH                  <not found>
+Create the environment once, then retry:
+  uv venv \"\$PLUGIN_ROOT/.venv\" && \"\$PLUGIN_ROOT/.venv/bin/python\" -m pip install -e \"\$PLUGIN_ROOT\"[mcp]"

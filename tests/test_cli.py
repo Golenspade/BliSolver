@@ -484,8 +484,10 @@ def test_process_part_danmaku_flag_on_youtube_warns_and_stays_none(monkeypatch, 
     assert calls["represent_danmaku"] is None  # never called
     assert calls["build_danmaku"] is None       # Bundle.danmaku stays null
     captured = capsys.readouterr()
-    assert "--danmaku ignored" in captured.out
-    assert "not supported on youtube.com" in captured.out
+    # Progress and warnings go to stderr so stdout stays a machine-readable channel.
+    assert "--danmaku ignored" in captured.err
+    assert "not supported on youtube.com" in captured.err
+    assert captured.out == ""
 
 
 def test_process_part_danmaku_flag_without_model_configured_warns_and_skips(monkeypatch, capsys):
@@ -515,8 +517,9 @@ def test_process_part_danmaku_flag_without_model_configured_warns_and_skips(monk
     assert calls["represent_danmaku"] is None  # never called
     assert calls["build_danmaku"] is None       # Bundle.danmaku stays null
     captured = capsys.readouterr()
-    assert "--danmaku ignored" in captured.out
-    assert "BLISOLVER_DANMAKU_MODEL not set" in captured.out
+    assert "--danmaku ignored" in captured.err
+    assert "BLISOLVER_DANMAKU_MODEL not set" in captured.err
+    assert captured.out == ""
 
 
 def test_process_part_without_danmaku_flag_leaves_bundle_danmaku_none_and_skips_represent(monkeypatch):

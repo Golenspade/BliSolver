@@ -98,44 +98,94 @@ def test_get_visual_context_payload_returns_frames_and_ocr():
 
 # --- job store + status inference ----------------------------------------------------
 
-def _make_rec(tmp_path, *, pid=None, bundle_exists=False, bundle_path=None):
+# A title-prefixed delivery directory, which is what `write_bundle` actually produces. The old
+# store reconstructed `out/<id>-p<part>/bundle.json` instead of reading the producer's report, so
+# every titled video — that is, every real video — left its job stuck reporting "running" and then
+# "failed". Using the real naming here makes that regression impossible to reintroduce silently.
+TITLED_DIR = "为什么孩子不上班父母会觉得天塌了一样？ [BV1-p1]"
+
+
+def _result_envelope(bundle_json: str | None, *, part: int = 1, error: str | None = None) -> dict:
+    entry: dict = {"part": part, "ok": error is None}
+    if error is not None:
+        entry["error"] = error
+    if bundle_json is not None:
+        entry.update({
+            "bundle_dir": str(Path(bundle_json).parent),
+            "bundle_json": bundle_json,
+            "bundle_md": str(Path(bundle_json).parent / "bundle.md"),
+        })
+    return {
+        "schema_version": "1.1", "platform": "bilibili.com", "id": "BV1",
+        "ok": error is None, "parts": [entry],
+    }
+
+
+def _make_rec(tmp_path, *, pid=None, result: dict | None = None, bundle_exists=False):
+    """Build a persisted job record. `result` is the `ingest --json` envelope the child wrote."""
     settings = _settings(tmp_path)
-    bp = bundle_path or str(settings.out_dir / "BV1-p1" / "bundle.json")
+    bundle_json = str(settings.out_dir / TITLED_DIR / "bundle.json")
+    jobs = settings.cache_dir / "mcp-jobs"
+    jobs.mkdir(parents=True, exist_ok=True)
     rec = JobRecord(
         job_id="abc123", url="u", canonical_id="BV1", part=1, mode="auto",
-        pid=pid, started_at=time.time(), bundle_path=bp,
-        log_path=str(settings.cache_dir / "mcp-jobs" / "abc123.log"),
+        pid=pid, started_at=time.time(),
+        result_path=str(jobs / "abc123.result.json"),
+        log_path=str(jobs / "abc123.log"),
     )
     from blisolver.mcp.server import _save_job
     _save_job(settings, rec)
     if bundle_exists:
-        Path(bp).parent.mkdir(parents=True, exist_ok=True)
-        Path(bp).write_text(json.dumps(_bundle_dict()), encoding="utf-8")
-    return settings, rec
+        Path(bundle_json).parent.mkdir(parents=True, exist_ok=True)
+        Path(bundle_json).write_text(json.dumps(_bundle_dict()), encoding="utf-8")
+    if result is not None:
+        Path(rec.result_path).write_text(json.dumps(result), encoding="utf-8")
+    return settings, rec, bundle_json
 
 
-def test_job_status_running_when_pid_alive(monkeypatch, tmp_path):
-    settings, rec = _make_rec(tmp_path, pid=99999, bundle_exists=False)
-    # pid 99999 is almost certainly dead on the test host; force "alive" via the probe.
+def test_job_status_running_when_no_result_yet_and_pid_alive(monkeypatch, tmp_path):
+    settings, rec, _ = _make_rec(tmp_path, pid=99999)
     monkeypatch.setattr("blisolver.mcp.server._pid_alive", lambda pid: True)
     assert job_status(settings, rec).status == "running"
 
 
-def test_job_status_done_when_pid_dead_and_bundle_present(tmp_path):
-    settings, rec = _make_rec(tmp_path, pid=None, bundle_exists=True)
+def test_job_status_done_reads_the_bundle_path_from_the_producer(tmp_path):
+    """The store must learn the location from the envelope. A title-prefixed directory is not
+    derivable from {platform, id, part}, so any reconstruction fails this test."""
+    settings, rec, bundle_json = _make_rec(tmp_path, bundle_exists=True)
+    Path(rec.result_path).write_text(json.dumps(_result_envelope(bundle_json)), encoding="utf-8")
     st = job_status(settings, rec)
     assert st.status == "done"
-    assert st.bundle_path == rec.bundle_path
+    assert st.bundle_path == bundle_json
+    assert TITLED_DIR in st.bundle_path
+    assert st.result is not None and st.result["ok"] is True
 
 
-def test_job_status_failed_when_pid_dead_and_no_bundle(tmp_path):
-    settings, rec = _make_rec(tmp_path, pid=None, bundle_exists=False)
-    # Write a log so the failed status surfaces a why.
-    Path(rec.log_path).parent.mkdir(parents=True, exist_ok=True)
+def test_job_status_failed_when_the_envelope_reports_a_part_error(tmp_path):
+    settings, rec, _ = _make_rec(tmp_path)
+    Path(rec.result_path).write_text(
+        json.dumps(_result_envelope(None, error="RuntimeError: whisper-cli not found")),
+        encoding="utf-8",
+    )
+    st = job_status(settings, rec)
+    assert st.status == "failed"
+    assert "whisper-cli" in (st.error or "")
+
+
+def test_job_status_failed_when_process_died_without_a_result(tmp_path):
+    settings, rec, _ = _make_rec(tmp_path, pid=None)
     Path(rec.log_path).write_text("boom: whisper-cli not found", encoding="utf-8")
     st = job_status(settings, rec)
     assert st.status == "failed"
     assert "whisper-cli" in (st.error or "")
+
+
+def test_partial_result_file_is_not_mistaken_for_completion(tmp_path):
+    """The child writes stdout progressively; a truncated envelope must not read as done."""
+    settings, rec, _ = _make_rec(tmp_path, pid=1)
+    Path(rec.result_path).write_text('{"schema_version": "1.1", "parts": [', encoding="utf-8")
+    from blisolver.mcp.server import read_result
+    assert read_result(rec) is None
 
 
 def test_load_job_returns_none_for_unknown(tmp_path):
@@ -174,6 +224,7 @@ def test_start_ingest_job_spawns_ingest_with_mode_flags(monkeypatch, tmp_path):
     assert cmd[1] == "-m" and cmd[2] == "blisolver.cli"
     assert "ingest" in cmd and "https://www.bilibili.com/video/BV1dSKJ6wEVz/" in cmd
     assert "--no-vision" in cmd and "--no-frame-images" in cmd
+    assert "--json" in cmd, "the job store reads the child's own result envelope, not a guess"
     assert "--ocr" in cmd and "--force-ocr" in cmd  # force_ocr mode flags
     assert captured["env_set"] is True
     # Job record persisted + reloadable.

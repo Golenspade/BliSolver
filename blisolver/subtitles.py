@@ -28,6 +28,62 @@ _AUTO_ZH_KEYS = ("ai-zh",)                     # ASR-transcribed zh (bilibili ai
 # Kept for back-compat with anything that imported the combined tuple; new code uses the split.
 _ZH_KEYS = _HUMAN_ZH_KEYS + _AUTO_ZH_KEYS
 
+# Redaction markers seen in bilibili's server-side-censored AI Chinese tracks: `**` is the literal
+# substitution, `XX` and `和X` are the placeholder forms observed on real videos. A match rejects
+# the track and moves down the candidate list (see `_acquire`).
+#
+# This heuristic is textual and can fire on innocent content — `**` appears in Markdown-ish
+# speech, and `和X` is ordinary in a maths lecture ("X 和 Y"). A false positive is not silent: the
+# rejection is recorded in the returned `Acquisition.rejected` and surfaces in the bundle's
+# `source_reason`, so a reader can see that a Chinese track was dropped and on what evidence.
+_CENSORSHIP_MARKERS = re.compile(r"\*\*|XX|和[Xx]")
+
+
+def track_language(track_key: str | None) -> str | None:
+    """Map a yt-dlp subtitle track key to the language it is actually in.
+
+    bilibili's ASR tracks are keyed `ai-<lang>`; the `ai-` prefix records *how* the track was
+    produced, not what language it holds. Reporting the raw key as a language would put `ai-en`
+    into a language field, and reporting a constant would be worse still — the bilibili provider
+    used to hardcode `"zh"`, so a video whose Chinese track was rejected in favour of the English
+    one was recorded as Chinese while carrying English text.
+    """
+    if not track_key:
+        return None
+    return track_key[3:] if track_key.startswith("ai-") else track_key
+
+
+@dataclass
+class Acquisition:
+    """A chosen subtitle track plus the tracks that were passed over to reach it.
+
+    `rejected` is what makes a cross-language fallback auditable: each entry is
+    `(track_key, why)` for a candidate that was fetched and then discarded. An empty tuple means
+    the first candidate was accepted.
+    """
+
+    source: str
+    lang: str
+    segments: list[Segment]
+    rejected: tuple[tuple[str, str], ...] = ()
+
+    @property
+    def is_language_proxy(self) -> bool:
+        """True when a Chinese track was rejected and a different language stands in for it."""
+        return bool(self.rejected) and track_language(self.lang) != "zh"
+
+    def describe_fallback(self) -> str:
+        """One clause naming the detour, for the bundle's transcript `source_reason`."""
+        if not self.rejected:
+            return ""
+        skipped = ", ".join(f"{key} ({why})" for key, why in self.rejected)
+        if self.is_language_proxy:
+            return (
+                f"language proxy: original-language track unusable [{skipped}]; "
+                f"delivered {self.lang} instead"
+            )
+        return f"fell back past [{skipped}] to {self.lang}"
+
 
 @dataclass
 class SubtitleResult:
@@ -37,6 +93,10 @@ class SubtitleResult:
     segments: list[Segment] = field(default_factory=list)
     reason: str = ""  # human-readable, flows into the D2 bundle.md header
     last_cue_end: float | None = None
+    # Tracks fetched and discarded before `lang` was accepted, as (track_key, why). Empty when the
+    # first candidate was taken. Carries the cross-language fallback fact to the provider so it can
+    # be recorded rather than lost.
+    rejected: tuple[tuple[str, str], ...] = ()
 
 
 def ydl_opts(
@@ -279,26 +339,32 @@ def _segments_from_track(formats: list, settings: Settings) -> list[Segment]:
 
 def _acquire(
     info: dict, canonical: Canonical, settings: Settings, _fetch, *, view=None
-) -> tuple[str, str, list[Segment]] | None:
-    """Get (source, lang, segments) for the best track, with censorship fallback support.
-    Iterates through the tracks returned by _pick_tracks."""
+) -> Acquisition | None:
+    """Walk the candidate tracks and return the first usable one, recording what was skipped.
+
+    Rejections used to be printed and then discarded. Two consequences: the bundle carried no
+    record that a cross-language substitution had happened, and the message went to stdout — the
+    channel `probe` and `ingest --json` reserve for machine-readable output. Both are fixed by
+    returning the rejections to the caller instead of narrating them.
+    """
     candidates = _pick_tracks(info)
     if not candidates:
         return None
-        
+
+    rejected: list[tuple[str, str]] = []
     for source, lang, formats in candidates:
         segments = _fetch(formats, settings)
-        
-        # Check for censorship in Chinese tracks
+
         if lang in _AUTO_ZH_KEYS or lang in _HUMAN_ZH_KEYS:
-            import re
-            raw_text = "".join(s.text for s in segments)
-            if re.search(r'\*\*|XX|和[Xx]', raw_text):
-                print(f"[{canonical.id}] Censorship detected in track {lang}, trying fallback...")
+            marker = _CENSORSHIP_MARKERS.search("".join(s.text for s in segments))
+            if marker:
+                rejected.append((lang, f"censorship marker {marker.group(0)!r}"))
                 continue
-                
-        return source, lang, segments
-        
+
+        return Acquisition(
+            source=source, lang=lang, segments=segments, rejected=tuple(rejected)
+        )
+
     return None
 
 
@@ -311,7 +377,7 @@ def fetch_subtitle_segments(
     acq = _acquire(info, canonical, settings, _segments_from_track, view=view)
     if acq is None:
         return None
-    return acq[2] or None
+    return acq.segments or None
 
 
 def probe(
@@ -329,9 +395,21 @@ def probe(
     accepted for call-site compatibility (it no longer drives a player-API fallback fetch)."""
     acq = _acquire(info, canonical, settings, _fetch, view=view)
     if acq is None:
-        return SubtitleResult(False, None, None, reason="no original-language subtitle available")
+        # Precise about which of the two situations occurred. The old wording said "no
+        # original-language subtitle available" for both, which became misleading once the
+        # candidate list grew past Chinese: a run that fetched several tracks and rejected each of
+        # them reported the same thing as a video with no tracks at all.
+        tracks = _pick_tracks(info)
+        if not tracks:
+            return SubtitleResult(False, None, None, reason="no subtitle track offered")
+        offered = ", ".join(lang for _, lang, _ in tracks)
+        return SubtitleResult(
+            False, None, None,
+            reason=f"every offered subtitle track was rejected (offered: {offered})",
+        )
 
-    source, lang, segments = acq
+    source, lang, segments = acq.source, acq.lang, acq.segments
+    fallback_note = acq.describe_fallback()
     if not segments:
         return SubtitleResult(
             False, None, None, reason=f"subtitle track {lang!r} parsed to zero cues"
@@ -366,12 +444,16 @@ def probe(
 
     # Provenance (schema 1.1): tag each CC cue with its source + confidence=1.0 (CC is a
     # trusted track by construction; ASR/OCR report their own confidence where available).
-    # `source` here is "human-sub"/"auto-sub" from _pick_track.
+    # `source` here is "human-sub"/"auto-sub" from _pick_tracks.
     for seg in segments:
         seg.source = source
         if seg.confidence is None:
             seg.confidence = 1.0
 
+    reason = f"{source} ({lang})"
+    if fallback_note:
+        reason = f"{reason}; {fallback_note}"
     return SubtitleResult(
-        True, source, lang, segments=segments, reason=f"{source} ({lang})", last_cue_end=last_end
+        True, source, lang, segments=segments, reason=reason, last_cue_end=last_end,
+        rejected=acq.rejected,
     )

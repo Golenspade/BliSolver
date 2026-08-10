@@ -153,6 +153,10 @@ class Settings:
     ocr: OCRSettings = field(default_factory=OCRSettings)
 
     # paths
+    # data_dir is the writable root for generated state. Defaults to the repository for a
+    # developer checkout; a conformant Agent Plugins client points it at PLUGIN_DATA so bundles
+    # and caches survive a plugin update (§9.1). See _resolve_data_dirs for precedence.
+    data_dir: Path = field(default_factory=lambda: PROJECT_ROOT)
     cache_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "cache")
     out_dir: Path = field(default_factory=lambda: PROJECT_ROOT / "out")
     ffmpeg_path: str | None = None
@@ -210,10 +214,9 @@ class Settings:
             youtube_cookies=os.environ.get("BLISOLVER_YT_COOKIES", "").strip().lower()
             in ("1", "true", "yes", "on"),
         )
-        if os.environ.get("BLISOLVER_CACHE_DIR"):
-            s.cache_dir = Path(os.environ["BLISOLVER_CACHE_DIR"])
-        if os.environ.get("BLISOLVER_OUT_DIR"):
-            s.out_dir = Path(os.environ["BLISOLVER_OUT_DIR"])
+        # cache/out placement is decided in one place (see _resolve_data_dirs) so the explicit
+        # per-directory overrides, the single-root override, and PLUGIN_DATA cannot disagree.
+        s = _resolve_data_dirs(s)
         s.ffmpeg_path = find_ffmpeg()
         s.aria2c_path = find_aria2c()
         s.js_runtime = find_js_runtime()
@@ -221,20 +224,60 @@ class Settings:
         return s
 
 
+def _resolve_data_dirs(s: "Settings") -> "Settings":
+    """Decide where cache/ and out/ live.
+
+    Agent Plugins 1.0.0 §9.1 designates `PLUGIN_DATA` as the client-managed directory for exactly
+    this kind of state: it is writable, dedicated to the installed plugin instance, and preserved
+    across plugin updates. `PLUGIN_ROOT` is package contents and may be replaced wholesale on an
+    update, so writing generated bundles there would lose them.
+
+    Precedence, most specific first:
+      1. BLISOLVER_CACHE_DIR / BLISOLVER_OUT_DIR — explicit, per-directory override
+      2. BLISOLVER_DATA_DIR/{cache,out}          — explicit, single-root override
+      3. PLUGIN_DATA/{cache,out}                 — supplied by a conformant plugin client
+      4. <repo>/{cache,out}                      — developer checkout default
+
+    A conformant client sets PLUGIN_DATA only for plugin subprocesses, so a hand-run CLI in a
+    checkout keeps using the repository directories and nothing moves under a developer's feet.
+    """
+    base: Path | None = None
+    if os.environ.get("BLISOLVER_DATA_DIR"):
+        base = Path(os.environ["BLISOLVER_DATA_DIR"])
+    elif os.environ.get("PLUGIN_DATA"):
+        base = Path(os.environ["PLUGIN_DATA"])
+    if base is not None:
+        s.data_dir = base
+        s.cache_dir = base / "cache"
+        s.out_dir = base / "out"
+    if os.environ.get("BLISOLVER_CACHE_DIR"):
+        s.cache_dir = Path(os.environ["BLISOLVER_CACHE_DIR"])
+    if os.environ.get("BLISOLVER_OUT_DIR"):
+        s.out_dir = Path(os.environ["BLISOLVER_OUT_DIR"])
+    return s
+
+
 def _resolve_ocr_paths(s: "Settings") -> "Settings":
     """Auto-detect the OCR worker script + its isolated venv Python when unset.
 
+    Environment overrides win, then the repository layout. The previous order was inverted relative
+    to this docstring: it preferred `<repo>/scripts/ocr_worker.py` and consulted
+    BLISOLVER_OCR_WORKER only when that file was absent, so an operator pointing the variable at a
+    different worker was silently ignored whenever the bundled one happened to exist.
+
     Defaults: worker at ``<repo>/scripts/ocr_worker.py``; Python at
-    ``<repo>/.ocr-venv/bin/python`` (a uv-managed Python 3.12 isolate). Env overrides take
-    precedence; absent auto-detection leaves the path None (the OCR stage then no-ops with a
-    clear diagnostic rather than crashing the whole ingest)."""
+    ``<repo>/.ocr-venv/bin/python`` (a uv-managed Python 3.12 isolate). When neither an override nor
+    the default resolves, the path stays None and the OCR stage no-ops with a clear diagnostic
+    rather than crashing the whole ingest."""
+    exe = ".exe" if os.name == "nt" else ""
     if not s.ocr_worker_path:
+        env_worker = os.environ.get("BLISOLVER_OCR_WORKER")
         cand = PROJECT_ROOT / "scripts" / "ocr_worker.py"
-        s.ocr_worker_path = str(cand) if cand.exists() else os.environ.get("BLISOLVER_OCR_WORKER") or None
+        s.ocr_worker_path = env_worker or (str(cand) if cand.exists() else None)
     if not s.ocr_venv_python:
-        exe = ".exe" if os.name == "nt" else ""
+        env_python = os.environ.get("BLISOLVER_OCR_VENV_PYTHON")
         cand = PROJECT_ROOT / ".ocr-venv" / "bin" / f"python{exe}"
-        s.ocr_venv_python = str(cand) if cand.exists() else os.environ.get("BLISOLVER_OCR_VENV_PYTHON") or None
+        s.ocr_venv_python = env_python or (str(cand) if cand.exists() else None)
     # OCR dials are env-overridable for tuning without code edits.
     s.ocr.fps = float(os.environ.get("BLISOLVER_OCR_FPS", s.ocr.fps))
     s.ocr.min_conf = float(os.environ.get("BLISOLVER_OCR_MIN_CONF", s.ocr.min_conf))

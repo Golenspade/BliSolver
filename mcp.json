@@ -1,0 +1,13 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "blisolver": {
+      "type": "stdio",
+      "command": "./bin/blisolver-mcp",
+      "cwd": "${PLUGIN_ROOT}",
+      "env": {
+        "BLISOLVER_DATA_DIR": "${PLUGIN_DATA}"
+      }
+    }
+  }
+}

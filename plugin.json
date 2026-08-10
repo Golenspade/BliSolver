@@ -1,0 +1,23 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "blisolver",
+  "version": "0.1.0",
+  "description": "Ingest bilibili.com and YouTube videos into Atlas-consumable bundles: a provenance-tagged original-language transcript, frame/vision notes, burned-in-subtitle OCR, and bilibili danmaku/interaction tracks.",
+  "author": {
+    "name": "alttina"
+  },
+  "homepage": "https://github.com/alttina/bilibili-get-content",
+  "repository": "https://github.com/alttina/bilibili-get-content",
+  "license": "MIT",
+  "keywords": [
+    "bilibili",
+    "youtube",
+    "video",
+    "transcript",
+    "whisper",
+    "ocr",
+    "danmaku",
+    "ingestion",
+    "mcp"
+  ]
+}

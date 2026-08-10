@@ -1,46 +1,63 @@
 # Source map
 
-## Canonical current sources
+The skill lives inside the plugin, beside the application. Paths below are relative to the plugin
+root, which is three directories above `scripts/`. Every claim in this skill is checkable there.
 
-Use these files when an operational claim needs verification in a live checkout:
+## Where to verify a claim
 
-| Claim | Current source |
+| Claim | Source |
 |---|---|
-| CLI verbs and flags | `blisolver/cli.py` |
+| CLI verbs, flags, stream discipline, `--json` envelope | `blisolver/cli.py` |
+| preflight checks and their stage labels | `blisolver/doctor.py` |
 | schema version and Pydantic shapes | `blisolver/schema.py` |
-| runtime/env defaults | `blisolver/config.py`, `.env.example` |
-| provider registry and normalized seam | `blisolver/providers/base.py` |
-| bilibili acquisition | `blisolver/providers/bilibili.py`, `blisolver/player_api.py`, `blisolver/danmaku.py`, `blisolver/interactions.py` |
+| data directory precedence, thresholds, env names | `blisolver/config.py`, `.env.example` |
+| provider registry and the normalized seam | `blisolver/providers/base.py` |
+| URL normalization (title prefixes, embeds, b23.tv) | `blisolver/resolve.py` |
+| bilibili acquisition and auth | `blisolver/providers/bilibili.py`, `blisolver/player_api.py` |
+| candidate track order, censorship fallback, `track_language` | `blisolver/subtitles.py` |
+| quality gate, including its language adaptation | `blisolver/quality.py` |
 | YouTube acquisition and caption tiers | `blisolver/providers/youtube.py`, `blisolver/providers/youtube_autosub.py` |
-| subtitle formats and parsing | `blisolver/subtitles.py` |
-| current ASR backend | `blisolver/transcribe.py` |
-| frame extraction and dedup | `blisolver/frames.py` |
-| LM Studio/projector behavior | `blisolver/vision.py` |
-| hard-subtitle OCR isolate | `blisolver/detect_hardsubs.py`, `blisolver/ocr.py`, `scripts/ocr_worker.py` |
+| ASR backend and its flags | `blisolver/transcribe.py` |
+| frame extraction and phash dedup | `blisolver/frames.py` |
+| LM Studio and projector verification | `blisolver/vision.py` |
+| burned-in OCR | `blisolver/detect_hardsubs.py`, `blisolver/ocr.py`, `scripts/ocr_worker.py` |
 | fusion diagnostics | `blisolver/fuse.py` |
-| bundle rendering and writes | `blisolver/merge.py` |
-| MCP behavior | `blisolver/mcp/server.py` |
+| bundle rendering and the output directory name | `blisolver/merge.py` |
+| MCP tools and job lifecycle | `blisolver/mcp/server.py` |
+| how a client launches the MCP server | `mcp.json`, `bin/blisolver-mcp` |
+| plugin identity and metadata | `plugin.json` |
+| danmaku representation, interaction whitelist | `blisolver/danmaku.py`, `blisolver/interactions.py` |
 
 ## Tests as executable truth
 
-The offline suite is the first place to check behavior before trusting prose. Relevant tests include
-`tests/test_cli.py`, `test_probe.py`, `test_schema` coverage in merge/CLI tests, provider tests,
-subtitle tests, transcription/vision/OCR tests, danmaku/interactions tests, and `test_mcp.py`.
+Check a test before trusting prose. The offline suite is the fastest way to learn actual behavior.
+
+| Question | Test |
+|---|---|
+| does the package satisfy Agent Plugins 1.0.0? | `tests/test_agent_plugin.py` |
+| what do the skill's scripts guarantee? | `tests/test_portable_skill.py` |
+| what does `ingest --json` promise, and where does state go? | `tests/test_ingest_contract.py` |
+| what does the censorship fallback record? | `tests/test_censorship_fallback.py` |
+| what does preflight actually check? | `tests/test_doctor.py` |
+| MCP job status inference | `tests/test_mcp.py` |
+| CLI parsing and the transcript decision | `tests/test_cli.py` |
+
 Live-network tests are marked `live` and excluded by default.
 
-## Historical documents
+## Documents, ranked
 
-`README.md`, `SPEC.md`, and `PROTOCOL.md` remain important contract/design documents, but current
-source wins when implementation has advanced. Phase plans under `docs/phase-*.md`, refactor plans,
-and dated `docs/superpowers/{plans,specs}/` files explain decisions and history; they are not
-runtime discovery sources.
+Current source and tests outrank all prose. Then `PROTOCOL.md` (the Atlas-facing contract),
+`SPEC.md`, and the root `README.md` where they agree with the code. Then `CONTEXT.md`. Dated files
+under `docs/superpowers/{plans,specs}/` and `docs/phase-*.md` explain history and decisions; they are
+not runtime discovery sources.
 
-## Known stale statements
+## Known stale statements elsewhere in the repository
 
-- Older setup text describes faster-whisper/CUDA, but current `blisolver/transcribe.py` invokes
-  `whisper-cli`/whisper.cpp.
-- Early architecture notes may describe schema 1.0; current `blisolver/schema.py` and emitted bundles
-  use schema 1.1 with per-cue provenance and `Bundle.ocr`.
-- Historical bilibili-only descriptions predate the current YouTube provider and its caption policy.
-- `bilibili.tv` may appear in type-level architecture, but current CLI control flow deliberately
-  rejects it as deferred.
+* `pyproject.toml` still declares a `transcribe` optional-dependency group containing faster-whisper
+  and NVIDIA CUDA wheels. The implementation is whisper.cpp via `whisper-cli`. The group is vestigial.
+* Older prose describes schema 1.0. Current bundles are 1.1, with per-cue provenance and
+  `Bundle.ocr`.
+* Historical bilibili-only descriptions predate the YouTube provider.
+* `bilibili.tv` appears in the `Platform` type but is rejected at runtime as deferred.
+* Documents written before the cross-language fallback describe acquisition as always
+  original-language. It is not; see `references/provider-guide.md`.

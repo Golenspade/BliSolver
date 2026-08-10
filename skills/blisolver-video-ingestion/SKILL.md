@@ -1,137 +1,220 @@
 ---
 name: blisolver-video-ingestion
-description: Operate the BliSolver blisolver pipeline for bilibili.com and YouTube videos, diagnose its runtime, run probe or ingest, and inspect or validate Atlas bundle outputs. Use when an Agent needs video acquisition, caption-versus-Whisper decisions, frame/vision/OCR processing, danmaku or interaction provenance, provider troubleshooting, or schema-1.1 bundle handling; do not use it for downstream summarization or entity extraction.
-license: MIT
-compatibility: Requires Python 3.11+ and either a BliSolver checkout or an installed blisolver command; media stages additionally require their documented external tools and services.
+description: Operate the BliSolver ingestion pipeline for bilibili.com and YouTube videos - diagnose the runtime, probe metadata cheaply, run an ingest, and inspect or validate the resulting Atlas bundle. Use when an Agent needs video acquisition, caption-versus-Whisper decisions, frame/vision/OCR context, danmaku or interaction provenance, provider troubleshooting, or schema-1.1 bundle handling. Do not use it for downstream summarization or entity extraction.
+license: MIT. LICENSE.txt has complete terms.
+compatibility: Requires Python 3.11+ and a Python environment holding BliSolver's dependencies. Media stages additionally require ffmpeg, whisper.cpp with a GGML model, a JavaScript runtime for YouTube, LM Studio for vision, and an isolated OCR environment.
 metadata:
   project: BliSolver
   bundle-schema: "1.1"
   platforms: "bilibili.com, youtube.com"
+  plugin-format: "Agent Plugins 1.0.0"
 ---
 
 # BliSolver video ingestion
 
-Use this skill to operate the **BliSolver/blisolver** ingestion front-door. BliSolver acquires a video,
-chooses a trustworthy original-language transcript, optionally extracts visual/OCR context and
-bilibili engagement tracks, and writes an Atlas-consumable bundle. It is not the Atlas summarizer:
-do not ask blisolver to summarize, extract entities, or promote danmaku into facts.
+BliSolver acquires a video, picks a trustworthy transcript, optionally extracts visual/OCR context
+and bilibili engagement tracks, and writes an Atlas-consumable bundle. It is an acquisition and
+normalization boundary, not the Atlas summarizer: do not ask it to summarize, extract entities, or
+promote danmaku into facts.
 
-## Current truth
+This skill ships inside the BliSolver plugin, beside the application it drives. `blisolver/` is
+three directories up from `scripts/`, so the instructions below describe code you can read.
 
-When documents disagree, use this order:
+## Establish the runtime first
 
-1. current source code and tests;
-2. `PROTOCOL.md`, `SPEC.md`, and `README.md` where they agree with the code;
-3. `CONTEXT.md`;
-4. historical phase plans and design documents.
+Every command runs through one wrapper that resolves a Python holding BliSolver's dependencies.
+Do not invoke `python -m blisolver.cli` yourself and do not assume the interpreter you happen to
+have is the right one — a bare `python3` typically cannot import the package.
 
-The current contract is schema **1.1**. It includes per-segment `source`/`confidence` and an
-independent `Bundle.ocr` track. The current ASR implementation is `whisper-cli`/whisper.cpp; older
-faster-whisper/CUDA descriptions are historical where they conflict with `blisolver/transcribe.py`.
-`bilibili.tv` is deferred and unsupported.
+```bash
+SCRIPTS="$(dirname "$(dirname "$0")")/scripts"   # or the absolute path to this skill's scripts/
+python3 "$SCRIPTS/blisolver_cli.py" doctor
+```
 
-## Standard workflow
+`blisolver_cli.py` forwards every argument after its own to the CLI untouched, so any flag the
+application accepts works here. Add `--show-command` to print the resolved child command as JSON
+and exit without running it — do this before a job that costs minutes.
 
-Set `SKILL_ROOT` to the directory containing this `SKILL.md` (for example,
-`~/.agents/skills/blisolver-video-ingestion`) and use that absolute path when invoking scripts.
+Interpreter resolution order: `$BLISOLVER_PYTHON`, `$PLUGIN_DATA/venv/bin/python`,
+`<plugin-root>/.venv/bin/python`, then an installed `blisolver` on PATH. When none exists the
+wrapper exits 2 and prints how to create one.
 
-1. **Locate the runtime.** Run the bundled doctor before an expensive operation:
+## Diagnose before spending
 
-   ```bash
-   python "$SKILL_ROOT/scripts/doctor.py" --project-root /path/to/BliSolver --json
-   ```
+`doctor` is offline and cheap. Run it before any first ingest in an unfamiliar environment.
 
-   The wrappers also discover `BLISOLVER_PROJECT_ROOT`, an ancestor checkout, or an installed
-   `blisolver` command. Never put cookies or API keys on a command line.
+```bash
+python3 "$SCRIPTS/blisolver_cli.py" doctor --json
+```
 
-2. **Check the URL.** Only `bilibili.com` and YouTube are supported. For a cheap metadata check:
+Each check names the `stage` it gates, so a warning tells you what is unavailable rather than
+whether "something" is wrong:
 
-   ```bash
-   python "$SKILL_ROOT/scripts/probe.py" 'https://...' --project-root /path/to/BliSolver
-   ```
+| stage | checks | what a warning costs you |
+|---|---|---|
+| `core` | python, interpreter, plugin-manifest, ffmpeg, aria2c, javascript-runtime, cache-dir, out-dir | ffmpeg missing is fatal for every media stage; no JS runtime degrades YouTube extraction |
+| `auth` | provider-auth | a cold browser profile degrades every bilibili video to Whisper |
+| `transcript` | whisper-cli, whisper-model | the GGML weights are checked separately from the binary; a missing model fails *after* the audio download |
+| `vision` | vision-model | frame captioning cannot run; pass `--no-vision` |
+| `ocr` | ocr-isolate | `--ocr` degrades to a no-op |
+| `danmaku` | danmaku-model | `--danmaku` is accepted and then silently ignored |
 
-   `probe.py` keeps stdout as one JSON object and sends diagnostics to stderr. A `.tv` URL must be
-   stopped with the explicit deferred-platform error.
+Exit code is 0 when nothing is blocking (warnings included) and 1 only when a `core` check failed.
+Credentials are reported as configured or not; values are never printed.
 
-3. **Ingest deliberately.** Use the adapter for safe argument forwarding:
+## Check the URL cheaply
 
-   ```bash
-   python "$SKILL_ROOT/scripts/ingest.py" 'https://...' --project-root /path/to/BliSolver
-   ```
+Only `bilibili.com` and YouTube are supported. `bilibili.tv` is deferred and rejected with an
+explicit error.
 
-   Before running a costly job, inspect the command with `--dry-run`. Common controls are:
+```bash
+python3 "$SCRIPTS/blisolver_cli.py" probe 'https://...'
+```
 
-   | Need | Flag |
-   |---|---|
-   | select a bilibili part | `--part N` |
-   | process all bilibili parts | `--all-parts` |
-   | force local ASR | `--force-whisper` |
-   | pin language | `--lang CODE` (defaults to user's conversation language) |
-   | avoid repetition loops | `--robust` |
-   | skip frames/vision | `--no-vision` |
-   | omit delivered PNGs | `--no-frame-images` |
-   | enable burned-in subtitle OCR | `--ocr` (and `--force-ocr` when detection misses) |
-   | mirror bilibili danmaku | `--danmaku` |
-   | capture command-danmaku votes/grades | `--interactions` |
+`probe` prints one `ProbeResult` JSON object on stdout and sends errors to stderr with exit 1. It
+fetches metadata only — no media. Use `duration_s`, `parts`, `original_language`, and
+`available_subtitles` to decide whether an ingest is worth its cost and which acquisition path to
+expect.
 
-   **User-Language Alignment & Probe Decisioning:**
-   - Always align `--lang CODE` to the language of the user in the active conversation (e.g. `--lang en` for an English conversation, `--lang zh` for Chinese).
-   - `probe.py` returns `original_language` (the video's spoken language) and `available_subtitles` (all available subtitle tracks on the platform). Use this metadata to decide whether to fetch a platform track or trigger `--force-whisper --lang <original_language>`.
+## Ingest deliberately
 
-4. **Inspect and validate the result.** A successful part produces `out/<id>-p<part>/` with
-   `bundle.json`, `bundle.md`, and optionally `frames/`:
+```bash
+python3 "$SCRIPTS/blisolver_cli.py" ingest 'https://...' --json
+```
 
-   ```bash
-   python "$SKILL_ROOT/scripts/inspect_bundle.py" /path/to/out/<id>-p<part>
-   python "$SKILL_ROOT/scripts/validate_bundle.py" /path/to/out/<id>-p<part> \
-       --project-root /path/to/BliSolver
-   ```
+`--json` puts one result envelope on stdout; progress always goes to stderr. **Read the envelope
+rather than guessing where the bundle landed** — see "Finding the output" below.
 
-   `bundle.md` is the primary Atlas reading surface; `bundle.json` is the precise backing record.
-   A `null` optional track means it was not requested or not supported. An empty populated track
-   means it was requested but found no records.
+| Need | Flag |
+|---|---|
+| select a bilibili part | `--part N` |
+| process every part | `--all-parts` |
+| skip subtitle reuse, force local ASR | `--force-whisper` |
+| break ASR repetition loops | `--robust` |
+| skip frames and captioning | `--no-vision` |
+| tune near-duplicate frame collapse | `--dedup-threshold N` |
+| keep frame metadata but omit PNGs | `--no-frame-images` |
+| choose the output root | `--out PATH` |
+| burned-in subtitle OCR | `--ocr`, plus `--force-ocr` when detection misses a track you know exists |
+| mirror bilibili danmaku | `--danmaku` |
+| bilibili vote/grade widgets | `--interactions` |
+| set the ASR language | `--lang CODE` (read the caveat below) |
 
-## Bundled script inventory
+`--scene-threshold` is retained as a deprecated, ignored flag; it warns and does nothing.
 
-The portable skill contains five public entry points and one internal helper:
+### `--lang` is a transcription lever, not an output-language request
+
+This is the most misused flag in the pipeline. What it actually does:
+
+* It becomes whisper-cli's `-l`, i.e. *the language the recognizer expects to hear*. Passing
+  `--lang en` for Mandarin audio asks the recognizer to hear English in Chinese speech, which
+  produces garbage. It does not translate.
+* On **bilibili** it does not choose a subtitle track at all — the candidate order is fixed. The
+  CLI prints a note saying so. It applies only if the run falls back to Whisper.
+* On **YouTube** it does select a human caption track in that language, and that track is labelled
+  `human-sub`, the highest authority tier. Asking for a language the video was not spoken in
+  therefore stamps a translation with top confidence.
+
+Defaults are `zh` for bilibili and auto-detect for YouTube. Leave it unset unless you have a
+specific reason. If you need content in a different language than the video, that is a translation
+step downstream of this pipeline, not a flag here.
+
+## Finding the output
+
+A successful part writes `bundle.json`, `bundle.md`, and optionally `frames/` into a directory
+named:
+
+```text
+<out-root>/<sanitized title> [<id>-p<part>]/
+```
+
+The title prefix means **the directory is not derivable from the video id**. Take the paths from
+the `--json` envelope:
+
+```json
+{
+  "schema_version": "1.1",
+  "platform": "bilibili.com",
+  "id": "BV1...",
+  "ok": true,
+  "parts": [
+    {
+      "part": 1, "ok": true,
+      "bundle_dir": "/abs/path/<title> [BV1...-p1]",
+      "bundle_json": "/abs/.../bundle.json",
+      "bundle_md": "/abs/.../bundle.md",
+      "frames_dir": null,
+      "transcript_source": "auto-sub",
+      "transcript_language": "zh",
+      "segments": 412, "frames": 0,
+      "ocr_cues": null, "danmaku_windows": null, "interactions": null
+    }
+  ]
+}
+```
+
+`parts` lists every attempted part; a failed one carries `error` and no paths. An optional track
+reports `null` when it was not requested and a count when it was.
+
+Generated state lives under the plugin's data directory when a client provides one
+(`BLISOLVER_DATA_DIR`, else `PLUGIN_DATA`, else the repository), so bundles survive plugin updates.
+
+## Inspect and validate
+
+```bash
+python3 "$SCRIPTS/inspect_bundle.py"  <bundle-dir> --pretty
+python3 "$SCRIPTS/validate_bundle.py" <bundle-dir>
+```
+
+`inspect_bundle.py` reports counts and identity without printing transcript or danmaku bodies.
+`validate_bundle.py` checks the bundle against the live Pydantic contract, requires `bundle.md`,
+and rejects frame paths that escape the bundle directory; it exits 1 on an invalid bundle.
+
+`bundle.md` is the primary Atlas reading surface; `bundle.json` is the complete precise record —
+Markdown may cap danmaku lines per window, JSON never does.
+
+## Bundled scripts
 
 | File | Status | Purpose |
 |---|---|---|
-| `scripts/doctor.py` | public | Offline runtime/dependency/configuration report |
-| `scripts/probe.py` | public | JSON-safe wrapper around `blisolver probe` |
-| `scripts/ingest.py` | public | Safe flag-forwarding wrapper around `blisolver ingest` |
-| `scripts/inspect_bundle.py` | public | Local compact bundle summary |
-| `scripts/validate_bundle.py` | public | Schema 1.1, path, and artifact validation |
-| `scripts/_common.py` | internal | Runtime discovery and safe path/subprocess helpers; do not call directly |
+| `scripts/blisolver_cli.py` | public | Pass-through to the CLI with a resolved interpreter |
+| `scripts/inspect_bundle.py` | public | Local bundle summary, no text bodies |
+| `scripts/validate_bundle.py` | public | Schema and artifact validation |
+| `scripts/_runtime.py` | internal | Plugin-root and interpreter resolution; do not call directly |
 
-These are the only scripts shipped by this portable skill. The BliSolver checkout also contains
-project-local helpers such as `scripts/ocr_worker.py`; that OCR worker is a runtime dependency for
-`--ocr`, not a skill entry point. `scripts/make_paragraphs.py` and the pre-existing
-`scripts/download_video.py` are not part of the portable skill API.
+The plugin also exposes an MCP server for asynchronous work; see `references/mcp-contract.md`.
+The plugin root has its own `scripts/` directory, unrelated to this one; the `ocr_worker.py` there is
+a runtime dependency of `--ocr`, not an entry point.
 
 ## Authority and safety rules
 
-- Transcript authority is `human-sub > whisper > auto-sub`. Acquisition may choose auto-sub over
-  Whisper for cost, but provenance remains visible and `--force-whisper` is the override.
-- OCR is an independent burned-in subtitle timeline, not a replacement for the picked transcript.
-- Danmaku and interactions are lower-authority audience/reception signals. A danmaku author flag is
-  an unverified hash hint; a Vote question is structural uploader framing, not a content fact.
-- Never expose `SESSDATA`, `LMSTUDIO_API_KEY`, browser cookies, or full environment dumps.
-- Do not use `shell=True` or interpolate user URLs into shell strings. The bundled wrappers use
-  argument arrays and preserve child exit codes.
+* Transcript authority is `human-sub > whisper > auto-sub`. Acquisition may prefer a caption for
+  cost; `--force-whisper` is the override. Provenance stays visible in `Transcript.source_reason`.
+* A delivered transcript may not be in the video's original language. bilibili's Chinese ASR track
+  is sometimes returned redacted, and the pipeline then falls through to a foreign-language track.
+  When that happens `source_reason` says `language proxy` and `transcript.language` differs from
+  `original_language`. Compare those two before treating text as the speaker's own words.
+* OCR is an independent burned-in-subtitle timeline, not a replacement for the picked transcript.
+  `Frame.ocr` is sparse slide/UI text and a different thing again.
+* Danmaku and interactions are lower-authority audience signals. A danmaku author flag is an
+  unverified hash hint; a Vote question is uploader framing, not a claim the video makes.
+* Never put `SESSDATA`, `LMSTUDIO_API_KEY`, or cookies on a command line, and never echo an
+  environment dump. The wrappers pass the environment to the child and never print it.
+* The wrappers use argument arrays, never a shell string. Keep it that way when extending them.
 
 ## Load references as needed
 
 | Task | Read |
 |---|---|
 | component map and data flow | `references/architecture.md` |
-| exact CLI/schema/output contract | `references/current-contract.md` |
+| CLI verbs, flags, schema, output contract | `references/cli-contract.md` |
+| MCP tools, modes, job lifecycle | `references/mcp-contract.md` |
 | provider, auth, and subtitle decisions | `references/provider-guide.md` |
 | stage behavior and caching | `references/pipeline-stages.md` |
 | setup, recovery, and QA | `references/operational-runbook.md` |
 | terminology and authority | `references/domain-glossary.md` |
-| source/test locations and stale docs | `references/source-map.md` |
+| where to verify a claim in source | `references/source-map.md` |
 
-The skill package intentionally does not vendor the `blisolver/` application, environments, models,
-media, caches, outputs, or secrets. Install/copy the directory as a skill, then point its scripts at
-the target BliSolver checkout or installed CLI.
+When documents disagree, trust in this order: current source and tests; then `PROTOCOL.md`,
+`SPEC.md`, `README.md` where they agree with the code; then `CONTEXT.md`; then dated phase plans
+and design documents, which are history rather than contract.

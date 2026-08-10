@@ -1,74 +1,101 @@
 # Architecture
 
-## Purpose
+## Package shape
 
-`blisolver` is the ingestion front-door for Atlas. It starts with a supported video URL and ends with
-a self-contained `out/<id>-p<part>/` delivery directory. BliSolver produces a timeline-aligned
-original-language transcript and visual notes; downstream Atlas performs interpretation,
-summarization, and entity extraction.
+The repository root is the Agent Plugins plugin root, so the portable package and the application
+are the same tree:
 
-## Current module map
+```text
+<plugin-root>/
+├── plugin.json                     # Agent Plugins manifest
+├── mcp.json                        # one stdio MCP server
+├── bin/blisolver-mcp               # interpreter-resolving launcher for that server
+├── blisolver/                      # the application
+├── skills/blisolver-video-ingestion/
+│   ├── SKILL.md
+│   ├── references/
+│   └── scripts/
+├── scripts/ocr_worker.py           # runtime dependency of --ocr, not an entry point
+└── tests/
+```
 
-- `blisolver/cli.py` — parses `ingest`, `probe`, and `mcp`; orchestrates each selected part.
-- `blisolver/providers/base.py` — `Canonical`, normalized `SourceMetadata`, `SubtitleOutcome`,
-  provider protocol, and registry.
-- `blisolver/providers/bilibili.py` — bilibili URL resolution, metadata, subtitles, danmaku, and
-  command-danmaku interactions.
-- `blisolver/providers/youtube.py` — YouTube yt-dlp metadata and original-language caption selection.
-- `blisolver/subtitles.py` — yt-dlp options and BCC/SRT/VTT subtitle parsers.
-- `blisolver/probe.py` — maps normalized provider metadata to `ProbeResult`.
-- `blisolver/transcribe.py` — audio download/cache plus the current `whisper-cli`/whisper.cpp SRT
-  transcription shim.
-- `blisolver/frames.py` — video download/cache, periodic ffmpeg sampling, and phash deduplication.
-- `blisolver/vision.py` — LM Studio OpenAI-compatible image captioning and projector verification.
-- `blisolver/detect_hardsubs.py`, `blisolver/ocr.py`, `scripts/ocr_worker.py` — optional isolated
-  burned-in subtitle OCR.
-- `blisolver/fuse.py` — adds transcript/OCR cross-verification diagnostics.
-- `blisolver/danmaku.py` — fixed-window faithful danmaku representation when explicitly requested.
-- `blisolver/interactions.py` — structured Vote/Grade decoding without an LLM.
-- `blisolver/merge.py` — timeline chunking, bundle construction, Markdown rendering, and delivery.
-- `blisolver/schema.py` — Pydantic schema 1.1, the machine-facing bundle contract.
-- `blisolver/mcp/server.py` — MCP tools around probe, asynchronous ingest, transcript, timeline, and
-  visual-context reads.
+This co-location is deliberate. An earlier arrangement kept a copied skill package that
+reimplemented runtime discovery and restated the CLI's flags; both copies drifted from the code they
+described. A skill that sits beside the application and imports it cannot fall behind in the same
+way, and `tests/test_agent_plugin.py` plus `tests/test_portable_skill.py` fail when it starts to.
 
-## Execution flow
+## Entry points
+
+| Surface | Path | Nature |
+|---|---|---|
+| CLI | `blisolver/cli.py` | `ingest`, `probe`, `doctor`, `mcp` |
+| MCP | `blisolver/mcp/server.py` | five tools, async job store |
+| skill wrapper | `skills/*/scripts/blisolver_cli.py` | interpreter resolution plus pass-through |
+
+The two runtime surfaces share one interpreter-resolution chain, implemented once in
+`bin/blisolver-mcp` and once in `scripts/_runtime.py`, with a test asserting they agree.
+
+## Data flow
 
 ```text
 URL
-  -> provider registry / Canonical(platform, id, part)
-  -> normalized metadata and part enumeration
-  -> subtitle decision: human-sub / auto-sub / Whisper
-  -> optional audio download and whisper.cpp
-  -> optional video download -> periodic frames -> phash dedup -> LM Studio vision
-  -> optional hard-subtitle detection/OCR on its own timeline
-  -> optional bilibili danmaku and/or command-danmaku interactions
-  -> fusion diagnostics
-  -> bundle.json + bundle.md + optional frames/
+ └─ resolve.extract_url ─ providers.select_provider ─ provider.resolve ─→ Canonical{platform,id,part,url}
+                                                          │
+                            provider.fetch_metadata ──────┴─→ SourceMetadata (normalized)
+                                                          │
+   ┌──────────────────────────────────────────────────────┘
+   │
+   ├─ decide_transcript
+   │    ├─ provider.fetch_subtitle → SubtitleOutcome  (candidate walk, quality gate)
+   │    └─ fallback: transcribe.download_audio → whisper-cli → Segment[]
+   │
+   ├─ frames.download_video → frames.extract_frames → vision.caption_frames        [--no-vision skips]
+   ├─ detect_hardsubs → ocr.ocr_subtitle (isolated worker)                         [--ocr]
+   ├─ provider.fetch_danmaku → danmaku.represent_danmaku                           [--danmaku]
+   ├─ provider.fetch_interactions                                                  [--interactions]
+   │
+   ├─ fuse (only when an OCR track exists): cross-verification + hallucination diagnostics
+   │
+   └─ merge.build_bundle → merge.write_bundle → "<title> [<id>-p<part>]/{bundle.json,bundle.md,frames/}"
 ```
 
-A bilibili multi-part URL is decomposed into isolated single-part runs. `--all-parts` continues after
-an individual part failure and reports the failed part at the end. YouTube v1 uses part 1.
+`process_part` returns the artifact paths it wrote; `run_parts` collects them per part; `--json`
+serializes the collection. Nothing downstream reconstructs a path.
 
-## Seams and caching
+## Component responsibilities
 
-The provider owns source-specific acquisition and authentication. Downstream stages consume
-normalized metadata and never need platform-specific subtitle/API shapes. Heavy local artifacts stay
-in the modular monolith because the pipeline is local-file and GPU bound; LM Studio is the one
-intentionally external service boundary.
+* `resolve.py` — URL normalization and canonical identity. The `{platform, id, part}` triple is the
+  atomic cached unit.
+* `providers/base.py` — the seam. `Provider` protocol, `SourceMetadata`, `SubtitleOutcome`. Shared
+  stages never see a raw platform response.
+* `providers/bilibili.py`, `providers/youtube.py` — per-source acquisition, auth, and trust
+  decisions. The only places a platform is named.
+* `subtitles.py` — yt-dlp options, track candidate ordering, the censorship fallback, and BCC/SRT/VTT
+  parsers.
+* `quality.py` — the source- and language-aware gate that decides whether a caption is trustworthy.
+* `transcribe.py` — audio download/cache and the whisper.cpp shim.
+* `frames.py`, `vision.py` — periodic sampling with perceptual-hash dedup, then LM Studio captioning
+  behind a projector verification that hard-stops rather than hallucinating.
+* `detect_hardsubs.py`, `ocr.py` — burned-in subtitle detection and recognition, executed in a
+  separate environment so vision dependencies never enter the main one.
+* `fuse.py` — annotates the transcript's reason with cross-verification and ASR-hallucination
+  diagnostics. Never replaces the picked transcript.
+* `danmaku.py`, `interactions.py` — audience mirror and uploader widgets, both lower authority.
+* `merge.py` — bundle assembly, Markdown rendering, and the delivery directory.
+* `schema.py` — the Pydantic contract Atlas depends on.
+* `doctor.py` — offline preflight, reading the same `Settings` the pipeline reads.
+* `config.py` — settings, thresholds, tool discovery, and data-directory placement.
 
-Stage caches are keyed by video identity plus stage parameters. Flags such as `--force-whisper`,
-`--robust`, language, OCR knobs, and frame dedup settings must not silently reuse an incompatible
-result.
+Names in this list are relative to `blisolver/`. The plugin root also has a `scripts/` directory
+holding `ocr_worker.py`, which is separate from this skill's `scripts/`.
 
-## MCP boundary
+## Invariants
 
-`blisolver mcp` runs the stdio MCP server. The server exposes cheap `probe_video`, asynchronous
-`extract_transcript`, and polling reads for transcript, unified timeline, and visual context. It
-reuses the same CLI/pipeline semantics; it is an Agent-facing transport, not a second ingestion
-implementation.
-
-## What blisolver is not
-
-BliSolver should not summarize a lecture, infer entities, classify audience sentiment, or turn
-engagement counts into claims about video content. Those judgments belong to Atlas, with the bundle's
-provenance and authority signals available as input.
+* One authoritative transcript per bundle. OCR is a parallel timeline, never a substitute.
+* Provenance is load-bearing, not decoration: source, language, model, gate, and per-cue tags all
+  feed downstream authority ranking.
+* Platform branching stops at the provider seam.
+* A per-part failure never aborts sibling parts.
+* stdout is a machine channel on every verb; progress is stderr.
+* Generated state lives in the data directory, which a plugin client can point outside the package
+  so it survives an update.

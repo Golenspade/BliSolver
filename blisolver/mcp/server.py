@@ -59,7 +59,12 @@ class JobRecord:
     mode: str
     pid: int | None
     started_at: float
-    bundle_path: str
+    # Where `ingest --json` writes its result envelope. The job's bundle location is read from
+    # there, never guessed. Guessing is what broke this store: `write_bundle` names the delivery
+    # directory after the sanitized video title, so the old `out/<id>-p<part>/bundle.json`
+    # reconstruction pointed at a path that never appeared for any titled video, leaving every
+    # job stuck on "running" until it was declared failed.
+    result_path: str
     log_path: str
 
 
@@ -103,40 +108,81 @@ class JobStatus:
     status: str  # "running" | "done" | "failed" | "unknown"
     bundle_path: str | None = None
     error: str | None = None
+    result: dict | None = None  # the full `ingest --json` envelope when the job finished
+
+
+def read_result(rec: JobRecord) -> dict | None:
+    """Parse the producer's result envelope, or None if it is absent or not yet complete.
+
+    `ingest` writes this file only after the whole run finishes, so a parseable envelope is a
+    reliable completion signal — the same role the bundle file used to play, without the guess.
+    """
+    path = Path(rec.result_path)
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None  # still being written, or truncated by a crash
+    return payload if isinstance(payload, dict) else None
+
+
+def _bundle_from_result(result: dict, part: int) -> str | None:
+    """Pick this job's part out of the envelope. Falls back to the sole successful part."""
+    parts = [p for p in result.get("parts") or [] if isinstance(p, dict)]
+    for entry in parts:
+        if entry.get("part") == part and entry.get("ok") and entry.get("bundle_json"):
+            return entry["bundle_json"]
+    successful = [p for p in parts if p.get("ok") and p.get("bundle_json")]
+    return successful[0]["bundle_json"] if len(successful) == 1 else None
 
 
 def job_status(settings: Settings, rec: JobRecord) -> JobStatus:
-    """Infer status from the bundle file + process liveness (no worker callback needed).
+    """Infer status from the producer's result envelope, then process liveness.
 
     Precedence (most reliable first):
-      * bundle.json exists      -> done   (ingest writes it LAST, so presence == finished)
-      * in-memory Popen .poll()  -> running (poll reaps; None == still running)
-      * os.kill(pid, 0)         -> running (fallback after a server restart; zombies may
-                                         misreport alive, but bundle-exists already caught those)
-      * dead + no bundle        -> failed (tail the log for the why)
+      * a parseable result envelope -> the run finished; report done or failed from its contents
+      * in-memory Popen .poll()     -> running (poll reaps; None == still running)
+      * os.kill(pid, 0)             -> running (fallback after a server restart)
+      * dead with no envelope       -> failed (tail the log for the why)
     """
-    bundle = Path(rec.bundle_path)
-    if bundle.exists():
-        return JobStatus(status="done", bundle_path=rec.bundle_path)
+    result = read_result(rec)
+    if result is not None:
+        bundle = _bundle_from_result(result, rec.part)
+        if bundle and Path(bundle).exists():
+            return JobStatus(status="done", bundle_path=bundle, result=result)
+        # The run completed and reported failure, or reported a path that is gone.
+        errors = [
+            p.get("error") for p in result.get("parts") or [] if isinstance(p, dict) and p.get("error")
+        ]
+        return JobStatus(
+            status="failed",
+            error="; ".join(e for e in errors if e) or _log_tail(rec) or
+            "ingest finished without producing a bundle for this part",
+            result=result,
+        )
+
     proc = _PROCS.get(rec.job_id)
     if proc is not None:
-        rc = proc.poll()
-        if rc is None:
+        if proc.poll() is None:
             return JobStatus(status="running")
-        # Reaped + no bundle -> failed.
-        err = ""
-        log = Path(rec.log_path)
-        if log.exists():
-            err = log.read_text(encoding="utf-8", errors="replace")[-800:]
-        return JobStatus(status="failed", error=err or f"(ingest exited rc={rc} without a bundle)")
-    # No in-memory handle (server restarted): fall back to pid probe.
+        return JobStatus(
+            status="failed",
+            error=_log_tail(rec) or f"(ingest exited rc={proc.returncode} without a result file)",
+        )
+    # No in-memory handle (server restarted): fall back to a pid probe.
     if _pid_alive(rec.pid):
         return JobStatus(status="running")
-    err = ""
+    return JobStatus(
+        status="failed", error=_log_tail(rec) or "(ingest died without writing a result file)"
+    )
+
+
+def _log_tail(rec: JobRecord, limit: int = 800) -> str:
     log = Path(rec.log_path)
-    if log.exists():
-        err = log.read_text(encoding="utf-8", errors="replace")[-800:]
-    return JobStatus(status="failed", error=err or "(ingest died without writing a bundle)")
+    if not log.exists():
+        return ""
+    return log.read_text(encoding="utf-8", errors="replace")[-limit:]
 
 
 # --- mode -> ingest flags ------------------------------------------------------------
@@ -151,33 +197,37 @@ _MODE_FLAGS = {
 def start_ingest_job(
     url: str, mode: str, settings: Settings
 ) -> JobRecord:
-    """Resolve the URL, spawn a non-blocking `blisolver ingest` subprocess, return its job record.
+    """Resolve the URL, spawn a non-blocking `blisolver ingest --json` subprocess, return its record.
 
-    The subprocess inherits this process's env (BLISOLVER_COOKIES_BROWSER / WHISPER_* must already
-    be set on the MCP server's environment, same as running the CLI by hand). --no-vision +
-    --no-frame-images keep the async job lean (vision/frames are a separate concern surfaced by
-    get_visual_context on a job that ran --ocr or --vision).
+    `--json` is what makes the job observable: the child reports its own bundle locations on
+    stdout, which is captured to a result file. Progress text goes to stderr and lands in the log,
+    so the two streams never contaminate each other.
+
+    The subprocess inherits this process's env, same as running the CLI by hand. --no-vision +
+    --no-frame-images keep the async job lean (frames are a separate concern surfaced by
+    get_visual_context on a job that ran --ocr).
     """
     if mode not in _MODE_FLAGS:
         raise ValueError(f"unknown mode {mode!r}; expected one of {list(_MODE_FLAGS)}")
     canonical = select_provider(url).resolve(url)
     job_id = uuid.uuid4().hex[:12]
-    bundle_path = str(settings.out_dir / f"{canonical.id}-p{canonical.part}" / "bundle.json")
+    result_path = str(_jobs_dir(settings) / f"{job_id}.result.json")
     log_path = str(_jobs_dir(settings) / f"{job_id}.log")
     flags = _MODE_FLAGS[mode]
     cmd = [
         sys.executable, "-m", "blisolver.cli", "ingest", url,
-        "--no-vision", "--no-frame-images", *flags,
+        "--no-vision", "--no-frame-images", "--json", *flags,
     ]
+    result_f = open(result_path, "w", encoding="utf-8")
     log_f = open(log_path, "w", encoding="utf-8")
     proc = subprocess.Popen(
-        cmd, stdout=log_f, stderr=subprocess.STDOUT,
+        cmd, stdout=result_f, stderr=log_f,
         cwd=str(PROJECT_ROOT), env=os.environ.copy(),
     )
     rec = JobRecord(
         job_id=job_id, url=url, canonical_id=canonical.id, part=canonical.part,
         mode=mode, pid=proc.pid, started_at=time.time(),
-        bundle_path=bundle_path, log_path=log_path,
+        result_path=result_path, log_path=log_path,
     )
     _save_job(settings, rec)
     _PROCS[job_id] = proc  # keep the handle so job_status can poll()/reap, not just os.kill

@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import sys
+from pathlib import Path
 
 from .cache import fs_key, load_json, save_json
 from .config import Settings
@@ -19,7 +20,7 @@ from .parts import run_parts, select_parts
 from .player_api import ViewError
 from .probe import probe
 from .providers.base import Canonical, select_provider
-from .schema import Frame, Segment, Transcript
+from .schema import SCHEMA_VERSION, Frame, Segment, Transcript
 from .transcribe import WHISPER_MODEL, download_audio, transcribe
 
 # NOTE: `probe` here is the metadata pre-flight probe (probe.py), used by the `probe` CLI verb
@@ -28,7 +29,25 @@ from .transcribe import WHISPER_MODEL, download_audio, transcribe
 # the URL-selected provider for a SubtitleOutcome (decide_transcript below).
 
 
-def parse_args(argv=None) -> argparse.Namespace:
+def _log(message: str) -> None:
+    """Progress goes to stderr, always.
+
+    stdout is a machine-readable channel: `probe` puts one JSON object there, and `ingest --json`
+    does the same. Mixing progress text into stdout is what forced every caller to guess where a
+    bundle landed by reconstructing the output directory name — a guess that silently broke when
+    the delivery directory gained a title prefix.
+    """
+    print(message, file=sys.stderr)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Build the argument parser.
+
+    Split out from `parse_args` so tests can introspect the real flag set instead of restating it.
+    `tests/test_skill_docs.py` walks this parser to assert the skill documents every flag the
+    application accepts, which is how an undocumented new flag becomes a test failure rather than
+    something a reader has to notice.
+    """
     p = argparse.ArgumentParser(prog="blisolver", description=__doc__)
     sub = p.add_subparsers(dest="command", required=True)
 
@@ -81,21 +100,35 @@ def parse_args(argv=None) -> argparse.Namespace:
         help="with --ocr: skip the hard-sub pre-detection and always run dense-sample OCR "
              "(use when detection misses a hard-sub track you know is present)",
     )
+    ingest.add_argument(
+        "--json", action="store_true", dest="as_json",
+        help="emit one JSON object on stdout with each part's bundle paths and counts "
+             "(progress output always goes to stderr, so stdout stays parseable)",
+    )
 
     probe_cmd = sub.add_parser("probe", help="cheap pre-flight metadata probe, no media")
     probe_cmd.add_argument("url")
 
+    doctor_cmd = sub.add_parser(
+        "doctor", help="offline preflight: report what will run and what will fail, no network"
+    )
+    doctor_cmd.add_argument(
+        "--json", action="store_true", dest="as_json", help="emit one JSON object on stdout"
+    )
+
     sub.add_parser("mcp", help="run the MCP server over stdio (Phase E Agent interface)")
 
-    return p.parse_args(argv)
+    return p
+
+
+def parse_args(argv=None) -> argparse.Namespace:
+    return build_parser().parse_args(argv)
 
 
 def apply_overrides(settings: Settings, args) -> list[str]:
     """Apply CLI levers onto Settings; return human-readable warnings for the caller to print."""
     warnings: list[str] = []
     if args.out:
-        from pathlib import Path
-
         settings.out_dir = Path(args.out)
     if args.dedup_threshold is not None:
         settings.phash_dedup_threshold = args.dedup_threshold
@@ -118,6 +151,15 @@ def decide_transcript(canonical, meta, settings, args):
                         reason="forced via --force-whisper", lang=default_lang)
 
     provider = select_provider(canonical.url)
+    # `--lang` reaches subtitle track selection only where a provider honours `pinned_lang`.
+    # bilibili fixes its own candidate order, so there the flag affects nothing unless the run
+    # falls through to Whisper. Say so rather than accepting the flag and quietly dropping it.
+    if args.lang and canonical.platform == "bilibili.com":
+        _log(
+            f"[{canonical.id} p{canonical.part}] note: --lang {args.lang} does not choose a "
+            f"bilibili subtitle track (candidate order is fixed); it applies only if this run "
+            f"falls back to Whisper"
+        )
     outcome = provider.fetch_subtitle(canonical, settings, meta, pinned_lang=args.lang)
     if outcome is None or not outcome.accepted:
         reason = outcome.source_reason if outcome else "no usable subtitle"
@@ -132,10 +174,15 @@ def decide_transcript(canonical, meta, settings, args):
 
 def _whisper(canonical, settings, args, *, reason, gate=None, lang=None) -> Transcript:
     # D6 transcript cache: keyed by identity + the params that change the output.
+    #
+    # `lang` is part of the key because it changes the output directly — it becomes whisper-cli's
+    # `-l` flag. Omitting it meant a re-run with a different --lang returned the previous
+    # language's transcript from cache, silently, with no indication that the flag had been
+    # ignored.
     key = fs_key(
         canonical.platform, canonical.id, canonical.part,
         stage="transcript", force_whisper=args.force_whisper,
-        robust=args.robust, model=WHISPER_MODEL,
+        robust=args.robust, model=WHISPER_MODEL, lang=lang or "auto",
     )
     cached = load_json(settings.cache_dir, "transcript", key)
     if cached is not None:
@@ -145,14 +192,14 @@ def _whisper(canonical, settings, args, *, reason, gate=None, lang=None) -> Tran
         for seg in segments:
             if seg.source is None:
                 seg.source = "whisper"
-        print(
+        _log(
             f"[{canonical.id} p{canonical.part}] whisper "
             f"({len(segments)} seg, cached): {reason}"
         )
     else:
-        print(f"[{canonical.id} p{canonical.part}] whisper: {reason} -> downloading audio...")
+        _log(f"[{canonical.id} p{canonical.part}] whisper: {reason} -> downloading audio...")
         audio = download_audio(canonical, settings)
-        print(f"[{canonical.id} p{canonical.part}] transcribing {audio.name} ({WHISPER_MODEL})...")
+        _log(f"[{canonical.id} p{canonical.part}] transcribing {audio.name} ({WHISPER_MODEL})...")
         segments = transcribe(audio, robust=args.robust, lang=lang)
         save_json(settings.cache_dir, "transcript", key, [s.model_dump() for s in segments])
     return Transcript(
@@ -166,7 +213,14 @@ def _whisper(canonical, settings, args, *, reason, gate=None, lang=None) -> Tran
     )
 
 
-def process_part(canonical: Canonical, settings: Settings, args) -> None:
+def process_part(canonical: Canonical, settings: Settings, args) -> dict:
+    """Run the pipeline for one atomic {platform, id, part} and return where its artifacts landed.
+
+    Returning the paths is the fix for a whole class of breakage. `write_bundle` names the delivery
+    directory after the sanitized video title, so no caller can derive it from the identity triple;
+    every consumer that tried (the MCP job store, the skill's documented `out/<id>-p<part>` path)
+    was reading a directory that stopped existing. The producer now reports the location it chose.
+    """
     provider = select_provider(canonical.url)
     meta = provider.fetch_metadata(canonical, settings)
     transcript = decide_transcript(canonical, meta, settings, args)
@@ -177,10 +231,10 @@ def process_part(canonical: Canonical, settings: Settings, args) -> None:
     if not args.no_vision:
         from .frames import download_video, extract_frames
 
-        print(f"[{canonical.id} p{canonical.part}] preparing video + frames...")
+        _log(f"[{canonical.id} p{canonical.part}] preparing video + frames...")
         video = download_video(canonical, settings)
         frames, frame_sources = extract_frames(canonical, video, settings)
-        print(f"[{canonical.id} p{canonical.part}] {len(frames)} frames after dedup")
+        _log(f"[{canonical.id} p{canonical.part}] {len(frames)} frames after dedup")
         if frames:
             frames = _caption(canonical, frames, frame_sources, settings)
             vision_model = settings.lmstudio_vision_model
@@ -188,10 +242,10 @@ def process_part(canonical: Canonical, settings: Settings, args) -> None:
     danmaku = None
     if args.danmaku:
         if not hasattr(provider, "fetch_danmaku"):
-            print(f"[{canonical.id} p{canonical.part}] --danmaku ignored: "
+            _log(f"[{canonical.id} p{canonical.part}] --danmaku ignored: "
                   f"not supported on {canonical.platform}")
         elif not settings.lmstudio_danmaku_model:
-            print(f"[{canonical.id} p{canonical.part}] --danmaku ignored: "
+            _log(f"[{canonical.id} p{canonical.part}] --danmaku ignored: "
                   f"BLISOLVER_DANMAKU_MODEL not set")
         else:
             fetch = provider.fetch_danmaku(canonical, settings)
@@ -206,12 +260,12 @@ def process_part(canonical: Canonical, settings: Settings, args) -> None:
     interactions = None
     if args.interactions:
         if not hasattr(provider, "fetch_interactions"):
-            print(f"[{canonical.id} p{canonical.part}] --interactions ignored: "
+            _log(f"[{canonical.id} p{canonical.part}] --interactions ignored: "
                   f"not supported on {canonical.platform}")
         else:
             interactions = provider.fetch_interactions(canonical, settings)
 
-    ocr_track = _maybe_ocr(canonical, settings, args, transcript, log=lambda m: print(m))
+    ocr_track = _maybe_ocr(canonical, settings, args, transcript, log=_log)
 
     # Phase D fusion: provenance tags are already on the segments (transcribe/provider outlets);
     # fuse annotates diagnostics (ASR hallucination + OCR cross-verification) onto the
@@ -223,8 +277,8 @@ def process_part(canonical: Canonical, settings: Settings, args) -> None:
         fusion = fuse(transcript, ocr_track)
         transcript = fusion.transcript
         if fusion.diagnostics:
-            print(f"[{canonical.id} p{canonical.part}] fusion: "
-                  f"{'; '.join(fusion.diagnostics)}")
+            _log(f"[{canonical.id} p{canonical.part}] fusion: "
+                 f"{'; '.join(fusion.diagnostics)}")
 
     bundle = build_bundle(
         canonical, meta, transcript, frames, settings,
@@ -233,12 +287,34 @@ def process_part(canonical: Canonical, settings: Settings, args) -> None:
     out = write_bundle(
         bundle, settings, frame_sources=frame_sources, frame_images=not args.no_frame_images
     )
+    out = Path(out)  # write_bundle returns a Path; tolerate a str from a stubbed writer
     n = len(transcript.segments)
-    print(
+    _log(
         f"[{canonical.id} p{canonical.part}] {transcript.source}: "
         f"{n} segments, {len(frames)} frames, "
         f"{"no OCR" if ocr_track is None else f"ocr={len(ocr_track)} cues"} -> {out}"
     )
+    return {
+        "platform": canonical.platform,
+        "id": canonical.id,
+        "part": canonical.part,
+        "url": canonical.url,
+        "title": bundle.title,
+        # Absolute paths: a consumer must never have to rebuild the directory name.
+        "bundle_dir": str(out),
+        "bundle_json": str(out / "bundle.json"),
+        "bundle_md": str(out / "bundle.md"),
+        "frames_dir": str(out / "frames") if not args.no_frame_images else None,
+        "transcript_source": transcript.source,
+        "transcript_language": transcript.language,
+        "segments": n,
+        "frames": len(frames),
+        "ocr_cues": None if ocr_track is None else len(ocr_track),
+        "danmaku_windows": None if danmaku is None else len(danmaku.windows),
+        "interactions": None if interactions is None else {
+            "votes": len(interactions.votes), "grades": len(interactions.grades),
+        },
+    }
 
 
 def _maybe_ocr(canonical, settings, args, transcript, *, log) -> list | None:
@@ -289,12 +365,12 @@ def _caption(canonical, frames, frame_sources, settings):
     )
     cached = load_json(settings.cache_dir, "captions", key)
     if cached is not None:
-        print(f"[{canonical.id} p{canonical.part}] captions: cached ({len(cached)})")
+        _log(f"[{canonical.id} p{canonical.part}] captions: cached ({len(cached)})")
         return [Frame(**f) for f in cached]
 
     verify_projector(settings)  # D7: hard-stop if the mmproj isn't really reading images
-    print(f"[{canonical.id} p{canonical.part}] captioning {len(frames)} frames via "
-          f"{settings.lmstudio_vision_model}...")
+    _log(f"[{canonical.id} p{canonical.part}] captioning {len(frames)} frames via "
+         f"{settings.lmstudio_vision_model}...")
     captioned = caption_frames(frames, frame_sources, settings)
     save_json(settings.cache_dir, "captions", key, [f.model_dump() for f in captioned])
     return captioned
@@ -339,7 +415,7 @@ def _run_ingest(args) -> int:
 
     parts = select_parts(args, canonical, total=total)
     if len(parts) > 1:
-        print(f"[{canonical.id}] {total} parts; running {len(parts)} -> {parts}")
+        _log(f"[{canonical.id}] {total} parts; running {len(parts)} -> {parts}")
 
     results = run_parts(
         canonical, parts, settings=settings, args=args, processor=process_part
@@ -349,8 +425,33 @@ def _run_ingest(args) -> int:
     if len(results) > 1 or failed:
         for r in results:
             status = "ok" if r.ok else f"FAILED ({r.error})"
-            print(f"[{canonical.id} p{r.part}] {status}")
+            _log(f"[{canonical.id} p{r.part}] {status}")
+
+    if getattr(args, "as_json", False):
+        _emit_ingest_result(canonical, results)
     return 1 if failed else 0
+
+
+def _emit_ingest_result(canonical: Canonical, results) -> None:
+    """One JSON object on stdout describing every attempted part.
+
+    Contract for callers (the MCP job store, the skill wrappers, Atlas):
+      * `parts` always lists every attempted part, successful or not, so a partial `--all-parts`
+        run is reportable rather than ambiguous.
+      * a successful part carries absolute `bundle_dir`/`bundle_json`/`bundle_md`.
+      * a failed part carries `error` and no paths.
+    """
+    print(json.dumps({
+        "schema_version": SCHEMA_VERSION,
+        "platform": canonical.platform,
+        "id": canonical.id,
+        "ok": all(r.ok for r in results),
+        "parts": [
+            {"part": r.part, "ok": r.ok, **({"error": r.error} if r.error else {}),
+             **(r.artifacts or {})}
+            for r in results
+        ],
+    }, ensure_ascii=False))
 
 
 def main(argv=None) -> int:
@@ -362,6 +463,9 @@ def main(argv=None) -> int:
     args = parse_args(argv)
     if args.command == "probe":
         return _run_probe(args)
+    if args.command == "doctor":
+        from .doctor import main as doctor_main
+        return doctor_main(as_json=args.as_json)
     if args.command == "mcp":
         from .mcp import main as mcp_main
         return mcp_main()

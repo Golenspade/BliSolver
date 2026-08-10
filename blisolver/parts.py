@@ -42,6 +42,10 @@ class PartResult:
     part: int
     ok: bool
     error: str | None = None
+    # What the processor produced. Carried out of the loop so the caller can report artifact
+    # locations instead of reconstructing them from the identity triple — the delivery directory
+    # is named after the sanitized title, so it is not derivable.
+    artifacts: dict | None = None
 
 
 def run_parts(
@@ -50,7 +54,7 @@ def run_parts(
     *,
     settings,
     args,
-    processor: Callable[[Canonical, object, object], None],
+    processor: Callable[[Canonical, object, object], dict | None],
 ) -> list[PartResult]:
     """Run `processor` for each selected part, isolating failures so one bad part (private,
     region-locked, transient CDN error) never aborts the rest of the batch."""
@@ -60,8 +64,8 @@ def run_parts(
             canonical.platform, canonical.id, p, part_url(canonical.url, p)
         )
         try:
-            processor(per_part, settings, args)
-            results.append(PartResult(p, True))
+            artifacts = processor(per_part, settings, args)
+            results.append(PartResult(p, True, artifacts=artifacts))
         except Exception as exc:  # noqa: BLE001 - isolation is the whole point
             results.append(PartResult(p, False, f"{type(exc).__name__}: {exc}"))
     return results
