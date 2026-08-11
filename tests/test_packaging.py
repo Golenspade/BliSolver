@@ -21,6 +21,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+from packaging.requirements import Requirement
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 
@@ -218,28 +219,29 @@ def test_readme_states_the_real_default_cookie_browser():
 def test_mcp_server_builds_against_the_installed_mcp():
     """Whatever `mcp` resolves to, `build_server()` must actually work.
 
-    `pyproject` declared an open `mcp>=1.0`. mcp 2.0 removed `mcp.server.fastmcp`, which
-    `blisolver/mcp/server.py` imports, so a fresh clone resolved 2.x and `blisolver mcp` died with
-    ModuleNotFoundError on its first run — while the development environment, holding an older
-    pinned version, kept working. Nothing in the suite noticed, because nothing built the server.
-
-    This calls the real constructor, so any future upstream break surfaces here rather than in a
-    user's first session.
+    This calls the real SDK 2.x constructor, so an upstream API break surfaces here rather than in
+    a user's first session.
     """
     pytest.importorskip("mcp", reason="the mcp extra is not installed in this environment")
 
+    from blisolver import __version__
     from blisolver.config import Settings
     from blisolver.mcp.server import build_server
 
     server = build_server(Settings())
-    assert server is not None
+    assert server.name == "blisolver"
+    assert server.version == __version__
 
 
-def test_mcp_dependency_is_bounded_against_the_known_break():
-    """An open upper bound on `mcp` reintroduces the failure above on the next major release."""
+def test_mcp_dependency_selects_only_the_supported_sdk_major():
+    """The server uses the stable SDK 2.x API and must not resolve an incompatible major."""
     specs = manifest()["project"]["optional-dependencies"]["mcp"]
     spec = next(s for s in specs if s.lower().startswith("mcp"))
-    assert "<" in spec, (
-        f"the mcp requirement {spec!r} has no upper bound; 2.0 removed the API server.py imports, "
-        f"so an unbounded range means a fresh install cannot run `blisolver mcp`"
-    )
+    supported = Requirement(spec).specifier
+
+    assert "2.0.0" in supported
+    assert "1.999.999" not in supported
+    assert "3.0.0" not in supported
+    assert "3.0.1" not in supported
+    assert "3.1.0" not in supported
+    assert "4.0.0" not in supported

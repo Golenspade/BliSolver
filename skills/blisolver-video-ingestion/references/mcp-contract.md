@@ -41,6 +41,24 @@ Every diagnostic from the launcher goes to stderr. stdout carries JSON-RPC and n
 To run the server by hand for debugging, invoke `bin/blisolver-mcp` directly; it derives
 `PLUGIN_ROOT` from its own location when a client has not supplied it.
 
+## Protocol versions and state boundary
+
+The server is built with the official Python SDK 2.x `MCPServer`. On the same stdio transport it
+serves modern MCP `2026-07-28` self-describing requests (with optional capability discovery through
+`server/discover`) and retains SDK-provided legacy MCP `2025-11-25` compatibility through
+`initialize`. `stateless_http` is an HTTP transport option, not an MCP `2026-07-28` switch, so it
+does not belong in this stdio server.
+
+Modern protocol dispatch does not carry a hidden server session. BliSolver's ingest lifecycle is
+application state instead: `extract_transcript` returns a `job_id`, every polling call sends that
+handle explicitly, and job records, logs, and result envelopes persist under `${PLUGIN_DATA}` via
+`BLISOLVER_DATA_DIR`. Restart recovery therefore depends on those persisted records and the
+explicit handle, not on an MCP session.
+
+This server does not call roots, sampling, or MCP protocol logging, and it does not introduce
+MRTR/`input_required` flows. It also does not enable or declare the Tasks extension: the existing
+`job_id` contract is a BliSolver tool-level API, not an MCP Task.
+
 ## Tools
 
 Five tools. One is synchronous and cheap; the rest are a start-then-poll pair set.

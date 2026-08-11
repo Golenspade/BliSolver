@@ -16,8 +16,9 @@ poll by inferring status from the process liveness + the bundle file's existence
 worker notification channel needed). The job record lives under cache/mcp-jobs/<job_id>.json.
 
 The tool logic is split into pure helper functions (jobs_*) so it is unit-testable without an
-MCP transport; the FastMCP wrappers are thin.
+MCP transport; the MCPServer wrappers are thin.
 """
+
 from __future__ import annotations
 
 import json
@@ -29,6 +30,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from .. import __version__
 from ..config import PROJECT_ROOT, Settings
 from ..probe import probe as _probe
 from ..providers.base import select_provider
@@ -284,14 +286,14 @@ def get_visual_context_payload(bundle: dict) -> dict:
     }
 
 
-# --- MCP server (FastMCP wrappers) ---------------------------------------------------
+# --- MCP server (MCPServer wrappers) ------------------------------------------------
 
 def build_server(settings: Settings | None = None):
-    """Build the FastMCP server with all five tools registered. `settings` injectable for tests;
+    """Build the MCPServer with all five tools registered. `settings` injectable for tests;
     default loads from env/.env."""
-    from mcp.server.fastmcp import FastMCP
+    from mcp.server import MCPServer
 
-    s = FastMCP("blisolver")
+    s = MCPServer("blisolver", version=__version__)
     _settings = settings or Settings.load()
 
     @s.tool()

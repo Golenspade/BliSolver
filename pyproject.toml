@@ -30,12 +30,9 @@ frames = ["Pillow>=12", "imagehash>=4.3.2"]
 # step 5: vision captioning
 vision = ["openai>=2.44"]
 # Phase E: MCP interface layer (Agent-callable server)
-# Upper bound is load-bearing, not caution: mcp 2.0 removed `mcp.server.fastmcp` entirely (2.x
-# exposes `MCPServer`/`Server` instead), which server.py imports. The constraint used to be an open
-# `>=1.0`, so a fresh install resolved 2.x and `blisolver mcp` died with ModuleNotFoundError on the
-# first run while an older pinned environment kept working. Migrating to the 2.x API is a separate
-# piece of work; until then this bound is what makes the declared dependency true.
-mcp = ["mcp>=1.0,<2"]
+# MCPServer is the stable SDK 2.x API. Keep the next-major upper bound so a future incompatible
+# SDK release cannot silently break a fresh plugin install.
+mcp = ["mcp>=2.0,<3"]
 dev = ["pytest>=8", "jsonschema>=4.20", "ruff>=0.6"]
 
 [project.scripts]

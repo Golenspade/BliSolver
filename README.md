@@ -97,6 +97,21 @@ Two things are worth knowing before you wire it up:
 `mcp.json` sets `BLISOLVER_DATA_DIR` to `${PLUGIN_DATA}`, so caches and bundles land in the
 client-managed data directory and survive a plugin update.
 
+### MCP protocol compatibility
+
+The stdio server uses the official Python SDK 2.x `MCPServer`. Modern clients speak MCP
+`2026-07-28` with self-describing requests and may discover capabilities through
+`server/discover`; SDK-provided legacy negotiation keeps MCP `2025-11-25` clients working through
+`initialize`. Because this is a stdio server, it does not use the HTTP-only `stateless_http`
+option.
+
+MCP `2026-07-28` removes protocol-session dependence, but BliSolver still has intentional
+application state. `extract_transcript` returns an explicit `job_id`; polling tools pass that
+handle back, and the corresponding records and results persist under `${PLUGIN_DATA}`. The server
+does not rely on an MCP session to remember a job. BliSolver does not currently call roots,
+sampling, or MCP protocol logging; introduce MRTR/`input_required` flows; or enable/declare the
+Tasks extension.
+
 ## 🚀 Usage
 
 ```bash

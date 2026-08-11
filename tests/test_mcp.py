@@ -1,6 +1,6 @@
 """Phase E: MCP interface layer — job store, status inference, payload readers, mode->flags.
 
-The MCP transport (FastMCP stdio) is exercised end-to-end separately; these tests pin the pure
+The MCP transport (MCPServer stdio) is exercised end-to-end separately; these tests pin the pure
 logic that the tools delegate to, without spinning up a server or a real ingest subprocess.
 """
 import json

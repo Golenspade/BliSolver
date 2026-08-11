@@ -1,7 +1,7 @@
 # 阶段 E 实施计划：MCP 接口层
 
 > 状态：**已完成并端到端验证**（BV1dSKJ6wEVz：probe→extract(11s)→get_transcript/get_timeline/get_visual_context 五工具全通）。
-> 前置确认：`mcp` SDK 装入主 venv，`FastMCP` 工具注册 OK。
+> 当前实现：`mcp` SDK 2.x 装入主 venv，`MCPServer` 工具注册 OK。
 
 ## 1. 目标
 
@@ -35,7 +35,7 @@
 ## 4. 文件
 
 - `blisolver/mcp/__init__.py`
-- `blisolver/mcp/server.py`：FastMCP + 5 工具 + job store（纯函数逻辑，可单测）
+- `blisolver/mcp/server.py`：MCPServer + 5 工具 + job store（纯函数逻辑，可单测）
 - `blisolver/cli.py`：加 `blisolver mcp` 子命令启动 server（stdio）
 - `pyproject.toml`：加 `mcp` optional dependency group
 - 测试：job store 状态推断 + 工具逻辑（mock subprocess，不真跑 ingest）

@@ -48,7 +48,10 @@ The wrapper integration tests require the repository-local `.venv`. `tests/test_
 - The repository root is the Agent Plugins root: keep `plugin.json`, `mcp.json`, `bin/`, `blisolver/`, and `skills/` co-located.
 - Keep the Agent Plugins schema versions in `plugin.json` and `mcp.json` identical. Skills are discovered only at `skills/<name>/SKILL.md`.
 - Keep a stdio MCP `command` as one executable token. Persist generated state under `${PLUGIN_DATA}` and never put credentials in package configuration.
-- The current server intentionally uses Python SDK 1.x (`mcp>=1,<2`) and `FastMCP`. Migration to MCP `2026-07-28`, SDK 2.x, or its stateless model is a separate scoped change, not incidental cleanup.
+- The server uses Python SDK 2.x (`mcp>=2,<3`) and `MCPServer`. It serves modern MCP `2026-07-28` and retains SDK-provided compatibility with legacy `2025-11-25` clients.
+- The transport remains stdio, so do not add the HTTP-only `stateless_http` option. Modern protocol dispatch is stateless, while BliSolver application state remains explicit: callers pass `job_id`, and generated job records live under `${PLUGIN_DATA}` rather than an MCP session.
+- SDK 2.x runs synchronous tool handlers in worker threads. Keep required cross-call state persisted and make any process-local optimization safe for concurrent access; `_PROCS` must never become the only job record.
+- Do not call roots, sampling, or MCP protocol logging; introduce MRTR/`input_required` flows; or enable/declare the Tasks extension unless BliSolver implements and tests that behavior deliberately.
 - Keep `bin/blisolver-mcp` and the Skill runtime resolver behavior aligned; their regression tests must change together.
 
 ## Security, State, and Existing Baselines
