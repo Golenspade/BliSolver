@@ -1,4 +1,4 @@
-"""Agent Plugins 1.0.0 conformance for this repository.
+"""Agent Plugins 1.0.0 package conformance for this repository.
 
 The repository root IS the plugin root: `plugin.json`, `mcp.json`, and `skills/` sit beside the
 `blisolver/` application instead of shadowing it in a separate copied package. That is the
@@ -10,6 +10,8 @@ forbid clients from retrieving a schema while loading a plugin, so the offline c
 that discipline and keep the suite network-free.
 
 Spec references are to https://agent-plugins.org/specification (v1.0.0, Working Draft).
+Section 11 specifies client behavior; BliSolver is a plugin package, not a plugin client, so that
+section is intentionally outside this suite's conformance claim.
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -67,7 +70,9 @@ def mcp_config() -> dict:
 
 def test_manifest_exists_at_plugin_root():
     """§5.1: clients check for a manifest at `plugin.json` in the plugin root."""
-    assert (PLUGIN_ROOT / "plugin.json").is_file()
+    path = PLUGIN_ROOT / "plugin.json"
+    assert path.is_file()
+    assert path.resolve().is_relative_to(PLUGIN_ROOT.resolve())
 
 
 def test_manifest_matches_canonical_schema(manifest):
@@ -89,7 +94,30 @@ def test_plugin_name_satisfies_name_constraints(manifest):
     assert PLUGIN_NAME_RE.match(name), f"invalid plugin name: {name!r}"
 
 
+def test_release_version_is_semver_and_stays_in_sync(manifest):
+    """§10.2 recommends SemVer; the plugin and Python package are one release artifact."""
+    project = tomllib.loads((PLUGIN_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    init_text = (PLUGIN_ROOT / "blisolver" / "__init__.py").read_text(encoding="utf-8")
+    match = re.search(r'^__version__\s*=\s*["\']([^"\']+)["\']', init_text, re.MULTILINE)
+    assert match, "blisolver.__version__ is not declared"
+
+    version = manifest["version"]
+    semver = (
+        r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
+        r"(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?"
+    )
+    assert re.fullmatch(semver, version), f"plugin version is not SemVer: {version!r}"
+    assert version == project["project"]["version"] == match.group(1)
+
+
 # --- MCP configuration (§7.2) --------------------------------------------------------------
+
+
+def test_mcp_config_exists_at_plugin_root():
+    """§6.2: MCP discovery uses the fixed root path `mcp.json`."""
+    path = PLUGIN_ROOT / "mcp.json"
+    assert path.is_file()
+    assert path.resolve().is_relative_to(PLUGIN_ROOT.resolve())
 
 
 def test_mcp_config_matches_canonical_schema(mcp_config):
@@ -140,18 +168,26 @@ def test_stdio_commands_are_single_resolvable_executable_tokens(mcp_config):
         assert os.access(resolved, os.X_OK), f"{name}: bundled command not executable: {command}"
 
 
-def test_stdio_cwd_uses_a_permitted_form(mcp_config):
+def test_stdio_cwd_uses_a_permitted_form(mcp_config, tmp_path):
     """§7.2.1: an explicit `cwd` is `./`-relative, `${PLUGIN_ROOT}`-rooted, or
     `${PLUGIN_DATA}`-rooted, and must stay inside the corresponding directory."""
+    plugin_root = PLUGIN_ROOT.resolve()
+    plugin_data = (tmp_path / "plugin-data").resolve()
+    plugin_data.mkdir()
+
     for name, entry in _stdio_servers(mcp_config):
         cwd = entry.get("cwd")
         if cwd is None:
             continue  # defaults to the plugin root
         assert CWD_RE.match(cwd), f"{name}: cwd form not permitted: {cwd!r}"
-        if cwd.startswith("./") or cwd.startswith("${PLUGIN_ROOT}"):
-            relative = cwd.replace("${PLUGIN_ROOT}", ".", 1).lstrip("/") or "."
-            resolved = (PLUGIN_ROOT / relative).resolve()
-            assert resolved.is_relative_to(PLUGIN_ROOT.resolve()), f"{name}: cwd escapes root"
+        if cwd.startswith("./"):
+            base, relative = plugin_root, cwd[2:]
+        elif cwd.startswith("${PLUGIN_ROOT}"):
+            base, relative = plugin_root, cwd.removeprefix("${PLUGIN_ROOT}").lstrip("/")
+        else:
+            base, relative = plugin_data, cwd.removeprefix("${PLUGIN_DATA}").lstrip("/")
+        resolved = (base / relative).resolve()
+        assert resolved.is_relative_to(base), f"{name}: cwd escapes its declared root"
 
 
 def test_stdio_env_does_not_shadow_reserved_variables(mcp_config):
@@ -173,9 +209,9 @@ def test_package_data_carries_no_credentials(mcp_config):
                 )
 
 
-def test_only_placeholders_defined_by_the_spec_are_used(mcp_config):
-    """§9.2: only `${PLUGIN_ROOT}` and `${PLUGIN_DATA}` are expanded; anything else stays literal
-    and would reach the subprocess as raw text."""
+def test_package_uses_only_portable_placeholders(mcp_config):
+    """§9.2 expands only `${PLUGIN_ROOT}` and `${PLUGIN_DATA}`. BliSolver deliberately avoids
+    leaving any other placeholder as literal subprocess text."""
     allowed = {"PLUGIN_ROOT", "PLUGIN_DATA"}
     for name, entry in _stdio_servers(mcp_config):
         values = [*(entry.get("args") or []), *(entry.get("env") or {}).values()]
@@ -221,9 +257,10 @@ def test_skill_frontmatter_conforms_to_agent_skills(skill_dir: Path):
     parent directory, and the optional fields have hard length/type limits."""
     text = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
     assert text.startswith("---\n"), f"{skill_dir.name}: SKILL.md must open with YAML frontmatter"
-    _, raw, _ = text.split("---", 2)
+    _, raw, body = text.split("---", 2)
     front = yaml.safe_load(raw)
     assert isinstance(front, dict), f"{skill_dir.name}: frontmatter must be a mapping"
+    assert body.strip(), f"{skill_dir.name}: SKILL.md must contain Markdown instructions"
 
     name = front.get("name")
     assert isinstance(name, str) and name, f"{skill_dir.name}: `name` is required"
@@ -239,6 +276,14 @@ def test_skill_frontmatter_conforms_to_agent_skills(skill_dir: Path):
         compatibility = front["compatibility"]
         assert isinstance(compatibility, str) and 1 <= len(compatibility) <= 500
 
+    if "license" in front:
+        assert isinstance(front["license"], str), f"{skill_dir.name}: `license` must be a string"
+
+    if "allowed-tools" in front:
+        assert isinstance(front["allowed-tools"], str), (
+            f"{skill_dir.name}: `allowed-tools` must be a space-delimited string"
+        )
+
     if "metadata" in front:
         metadata = front["metadata"]
         assert isinstance(metadata, dict), f"{skill_dir.name}: `metadata` must be a mapping"
@@ -249,7 +294,12 @@ def test_skill_frontmatter_conforms_to_agent_skills(skill_dir: Path):
             )
 
     unknown = set(front) - {
-        "name", "description", "license", "compatibility", "metadata", "allowed-tools",
+        "name",
+        "description",
+        "license",
+        "compatibility",
+        "metadata",
+        "allowed-tools",
     }
     assert not unknown, f"{skill_dir.name}: unknown frontmatter fields: {sorted(unknown)}"
 

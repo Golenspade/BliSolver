@@ -7,8 +7,8 @@
 # has blisolver's dependencies installed, then execs the server.
 #
 # Environment contract (§9.1): a conformant client guarantees PLUGIN_ROOT and PLUGIN_DATA in this
-# process's environment. Both are derived from this script's own location when it is run by hand
-# outside a client, so the launcher stays usable for local debugging.
+# process's environment. When run by hand outside a client, only PLUGIN_ROOT is derived from this
+# script's location; PLUGIN_DATA remains optional, so the launcher stays usable for local debugging.
 #
 # stdio transport discipline: stdout carries JSON-RPC only. Every diagnostic here goes to stderr.
 
@@ -58,7 +58,9 @@ Looked at, in order:
   \$PLUGIN_DATA/venv/bin/python       ${PLUGIN_DATA:+$PLUGIN_DATA/venv/bin/python}${PLUGIN_DATA:-<PLUGIN_DATA unset>}
   \$PLUGIN_ROOT/.venv/bin/python      $PLUGIN_ROOT/.venv/bin/python
   blisolver on PATH                  <not found>
-Create the environment once, with either:
+For a client-managed environment that survives plugin updates:
+  uv venv \"\$PLUGIN_DATA/venv\" && uv pip install --python \"\$PLUGIN_DATA/venv/bin/python\" -e \"\$PLUGIN_ROOT[mcp]\"
+For a developer checkout, use either:
   uv venv \"\$PLUGIN_ROOT/.venv\" && uv pip install --python \"\$PLUGIN_ROOT/.venv/bin/python\" -e \"\$PLUGIN_ROOT[mcp]\"
   python3 -m venv \"\$PLUGIN_ROOT/.venv\" && \"\$PLUGIN_ROOT/.venv/bin/pip\" install -e \"\$PLUGIN_ROOT[mcp]\"
 Note: 'uv venv' does not install pip into the environment, so 'python -m pip' will not work there."

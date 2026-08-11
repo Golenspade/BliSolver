@@ -117,5 +117,6 @@ no bilibili session, and every bilibili video will degrade to Whisper. Diagnose 
 ## Failure isolation
 
 Agent Plugins §7.2.2 requires a server that fails to start or connect not to invalidate the rest of
-the plugin. The skill remains fully usable through `scripts/blisolver_cli.py` when the MCP server is
-unavailable; the two surfaces share the pipeline but not a failure domain.
+the plugin. A conformant client should therefore still discover and expose the Skill when the MCP
+server is unavailable. Running `scripts/blisolver_cli.py` still requires a usable BliSolver Python
+environment, because the Skill and MCP surfaces intentionally share that runtime.
