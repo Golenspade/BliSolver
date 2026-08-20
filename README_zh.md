@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://capsule-render.vercel.app/api?type=waving&color=timeGradient&height=250&section=header&text=BliSolver&fontSize=90&animation=fadeIn&fontAlignY=38&desc=Atlas%20Knowledge%20Base%20Ingestion%20Front-Door&descAlignY=55&descAlign=50" alt="BliSolver Banner">
+  <img src="assets/blisolver-banner.png" alt="BliSolver Banner" width="100%">
   <br>
   <p>
     <a href="README.md">English</a> | <a href="README_zh.md">简体中文</a>
