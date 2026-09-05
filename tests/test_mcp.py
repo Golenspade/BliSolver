@@ -182,7 +182,7 @@ def test_job_status_failed_when_process_died_without_a_result(tmp_path):
 
 def test_partial_result_file_is_not_mistaken_for_completion(tmp_path):
     """The child writes stdout progressively; a truncated envelope must not read as done."""
-    settings, rec, _ = _make_rec(tmp_path, pid=1)
+    _settings_unused, rec, _ = _make_rec(tmp_path, pid=1)
     Path(rec.result_path).write_text('{"schema_version": "1.1", "parts": [', encoding="utf-8")
     from blisolver.mcp.server import read_result
     assert read_result(rec) is None
@@ -207,6 +207,7 @@ def test_start_ingest_job_spawns_ingest_with_mode_flags(monkeypatch, tmp_path):
         captured["cmd"] = cmd
         captured["cwd"] = kwargs.get("cwd")
         captured["env_set"] = "BLISOLVER_COOKIES_BROWSER" in (kwargs.get("env") or {})
+        captured["env"] = kwargs["env"]
         # Popen opens the log file; the fake proc just needs to exist.
         return _FakeProc()
 
@@ -227,6 +228,9 @@ def test_start_ingest_job_spawns_ingest_with_mode_flags(monkeypatch, tmp_path):
     assert "--json" in cmd, "the job store reads the child's own result envelope, not a guess"
     assert "--ocr" in cmd and "--force-ocr" in cmd  # force_ocr mode flags
     assert captured["env_set"] is True
+    assert captured["env"]["BLISOLVER_CACHE_DIR"] == str(settings.cache_dir.resolve())
+    assert captured["env"]["BLISOLVER_OUT_DIR"] == str(settings.out_dir.resolve())
+    assert len(rec.job_id) == 32
     # Job record persisted + reloadable.
     reloaded = load_job(settings, rec.job_id)
     assert reloaded is not None and reloaded.job_id == rec.job_id
@@ -240,7 +244,65 @@ class _NullFile:
     def close(self):
         pass
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
+
 
 def test_start_ingest_job_rejects_unknown_mode(tmp_path):
     with pytest.raises(ValueError):
         start_ingest_job("https://www.bilibili.com/video/BV1dSKJ6wEVz/", "bogus", _settings(tmp_path))
+
+
+@pytest.mark.parametrize("job_id", ["../outside", "/tmp/outside", "a/b", "a\\b", "", "a" * 65])
+def test_job_handle_cannot_select_an_arbitrary_file(tmp_path, job_id):
+    with pytest.raises(ValueError, match="invalid job_id"):
+        load_job(_settings(tmp_path), job_id)
+
+
+def test_job_record_symlink_cannot_escape_store(tmp_path):
+    settings = _settings(tmp_path)
+    jobs = settings.cache_dir / "mcp-jobs"
+    jobs.mkdir(parents=True)
+    (jobs / "outside.json").symlink_to(tmp_path / "outside.json")
+    with pytest.raises(ValueError, match="outside the configured job store"):
+        load_job(settings, "outside")
+
+
+def test_atomic_job_write_preserves_previous_record_on_failure(tmp_path, monkeypatch):
+    from blisolver.mcp.server import _save_job
+
+    settings, rec, _ = _make_rec(tmp_path)
+    rec.mode = "force_whisper"
+
+    def fail_replace(*args):
+        raise OSError("disk unavailable")
+
+    monkeypatch.setattr(Path, "replace", fail_replace)
+    with pytest.raises(OSError, match="disk unavailable"):
+        _save_job(settings, rec)
+    assert load_job(settings, rec.job_id).mode == "auto"
+    assert not list((settings.cache_dir / "mcp-jobs").glob("*.tmp"))
+
+
+def test_tool_call_budget_is_shared_safely_across_worker_threads(monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+
+    from blisolver.mcp.server import _CallBudget
+
+    monkeypatch.setattr("blisolver.mcp.server.time.monotonic", lambda: 100.0)
+    budget = _CallBudget(4)
+
+    def admit(_):
+        try:
+            budget.check()
+            return True
+        except ValueError:
+            return False
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        assert sum(pool.map(admit, range(20))) == 4
+    monkeypatch.setattr("blisolver.mcp.server.time.monotonic", lambda: 160.0)
+    budget.check()  # the window expires without sleeping

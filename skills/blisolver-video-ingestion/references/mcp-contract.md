@@ -79,6 +79,12 @@ Starts an ingest and returns immediately with `status: "running"`. `mode` select
 
 An unknown mode raises rather than silently running the default.
 
+`mode` is advertised as an enum in `inputSchema`. Every start creates a new opaque UUIDv4 handle
+(32 hexadecimal characters); existing short handles remain readable. Handles expire **7 days
+after creation**, including records from earlier versions. Expiry prevents MCP polling; it neither
+deletes bundles/caches nor cancels an already running ingest. A caller needing an expired job's
+result can read its existing bundle locally or start a new job (which may reuse stage caches).
+
 Every job runs with `--no-vision --no-frame-images --json`. Frame captioning is deliberately not
 part of the async surface; `get_visual_context` returns whatever the chosen mode produced, which
 means frames are empty unless a mode that generates them was used.
@@ -118,7 +124,44 @@ completion.
 directory is named after the sanitized video title, so `out/<id>-p<part>/` does not exist for any
 titled video; a store that derived it reported `running` forever and then `failed`.
 
-An unknown `job_id` returns `{"status": "unknown", "error": ...}` rather than raising.
+An unknown `job_id` returns `{"status": "unknown", "error": ...}`. Unknown, failed, and expired
+jobs set **`isError: true`** on the MCP result; running and done jobs set it to false. Polling
+responses carry the same payload in `structuredContent` and a serialized JSON `TextContent` block.
+Invalid handles and modes are tool execution errors, not filesystem lookups or fallback modes.
+
+The handle schema accepts 1–64 ASCII letters, digits, underscores, or hyphens. The job store also
+validates handles before any lookup and rejects record symlinks escaping its directory. Records
+are published atomically; in-memory process lookup/polling is locked for SDK worker threads.
+The ingest child receives the server's explicit data/cache/output directories, so injected Settings
+and inherited environment variables cannot direct the child into another store.
+
+## Admission limits and trust boundary
+
+Each running server instance uses thread-safe, rolling 60-second budgets: **20 probes**, **4 job
+starts**, and **120 polls shared across the three get tools**. Exhaustion returns a tool execution
+error with a retry delay before any provider call or subprocess launch. Budgets span client
+connections but reset when the server is recreated; these are local admission controls, not a
+cross-process queue or a cap on concurrently running ingest jobs.
+
+Annotations distinguish a read-only network probe, local read-only polling, and non-idempotent
+ingest that can download media, invoke models, and replace generated cache/bundle files. They are
+hints for clients, not an authorization mechanism. Stdio runs with the launching OS user's file
+permissions; this is a single-user local service, not an authenticated multi-tenant remote API.
+
+## Specification audit (2026-09-05)
+
+The official [latest specification](https://modelcontextprotocol.io/specification/latest) resolves
+to **2026-07-28**. The [changelog](https://modelcontextprotocol.io/specification/2026-07-28/changelog)
+and [tool contract](https://modelcontextprotocol.io/specification/2026-07-28/server/tools) are the
+upstream references; handle lifetime/entropy guidance is non-normative design guidance, while
+request/result fields and tool error signaling are protocol behavior.
+
+`tests/test_mcp_protocol.py` checks raw stdio JSON-RPC without an SDK client: no handshake or
+discovery prerequisite, `server/discover`, `resultType: "complete"`, list cache hints,
+unsupported-version error `-32022`, error results, and stable tool ordering after requests carrying
+different versions. It also checks modern/legacy tool calls, persisted jobs through a fresh server,
+structured/text payload parity, tool annotations, validation, and admission limits. The SDK owns
+wire encoding and version compatibility; the application does not duplicate that implementation.
 
 ## Environment and credentials
 

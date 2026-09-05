@@ -8,6 +8,30 @@ blisolver supersedes `bili-tool`. The contract is **multi-source**: `platform` d
 This is a fresh `1.0` contract, not a bili-tool patch — fields that were bilibili-specific are
 generalized (see §Changes-from-bili-tool at the end).
 
+## MCP transport and tool errors
+
+The stdio MCP endpoint uses the official Python SDK 2.x and supports **2026-07-28**, the current
+stable protocol verified on 2026-09-05, with SDK-provided **2025-11-25** compatibility. Modern
+requests are self-describing and do not require `initialize`; `server/discover`, `resultType`, and
+list cache hints are handled by the SDK. BliSolver does not enable the Tasks extension: `job_id`
+is explicit application state, persisted under the configured data directory.
+
+The three polling tools (`get_transcript`, `get_timeline`, `get_visual_context`) return matching
+`structuredContent` and serialized JSON text. `status: running` or `done` is a successful tool
+result. `unknown`, `failed`, and `expired` return **`isError: true`**. Invalid mode/handle inputs
+and admission-limit failures also produce tool execution errors. Clients must inspect `isError`
+before consuming a transcript and stop polling on terminal failures.
+
+New handles are UUIDv4 hex strings; old short handles remain valid. All handles expire seven days
+after their recorded creation time. Expiry affects MCP access only, not bundle retention or the
+running ingest. Budgets per server instance per rolling minute are 20 probes, 4 job starts, and
+120 polls shared by the three readers. Rate-limit errors include a retry delay. Reconnecting does
+not reset these budgets; restarting the server does.
+
+The [MCP contract](skills/blisolver-video-ingestion/references/mcp-contract.md) documents the
+single-user trust boundary, full tool surface, and specification links. The raw stdio and legacy
+regressions live in `tests/test_mcp_protocol.py`.
+
 ## CLI verbs
 
 ```bash

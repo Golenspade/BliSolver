@@ -12,7 +12,7 @@ Five tools mirror §6:
 
 Async model (minimal viable): extract_transcript spawns `blisolver ingest` as a non-blocking
 subprocess and returns a job_id immediately (whisper can take tens of minutes); the get_* tools
-poll by inferring status from the process liveness + the bundle file's existence (no separate
+poll by inferring status from the result envelope + process liveness (no separate
 worker notification channel needed). The job record lives under cache/mcp-jobs/<job_id>.json.
 
 The tool logic is split into pure helper functions (jobs_*) so it is unit-testable without an
@@ -23,12 +23,19 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
 import uuid
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Lock
+from typing import Annotated, Literal
+
+from mcp.types import CallToolResult, TextContent, ToolAnnotations
+from pydantic import Field
 
 from .. import __version__
 from ..config import PROJECT_ROOT, Settings
@@ -38,12 +45,36 @@ from ..providers.base import select_provider
 # --- job store -----------------------------------------------------------------------
 
 _JOBS_DIRNAME = "mcp-jobs"
+_JOB_ID = re.compile(r"[A-Za-z0-9_-]{1,64}\Z")
+JOB_TTL_S = 7 * 24 * 60 * 60
+JobId = Annotated[str, Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")]
+
+
+class _CallBudget:
+    """Per-process admission limit, shared by worker threads and protocol connections."""
+
+    def __init__(self, limit: int):
+        self.limit = limit
+        self._calls: deque[float] = deque()
+        self._lock = Lock()
+
+    def check(self) -> None:
+        with self._lock:
+            now = time.monotonic()
+            while self._calls and self._calls[0] <= now - 60:
+                self._calls.popleft()
+            if len(self._calls) >= self.limit:
+                retry_after = max(1, int(60 - (now - self._calls[0])) + 1)
+                raise ValueError(f"tool rate limit reached; retry after {retry_after} seconds")
+            self._calls.append(now)
+
 
 # In-memory Popen handles keyed by job_id, so job_status can poll() (which reaps finished
 # children) instead of os.kill(pid,0) — the latter misreports zombies as alive, so a job that
-# already finished stayed "running" forever. Lost on server restart; the bundle-exists check
-# below covers that case (a finished job always wrote its bundle before exiting).
+# already finished stayed "running" forever. Lost on server restart; persisted results and
+# the recorded pid remain the recovery source of truth.
 _PROCS: dict[str, subprocess.Popen] = {}
+_PROCS_LOCK = Lock()
 
 
 def _jobs_dir(settings: Settings) -> Path:
@@ -71,7 +102,13 @@ class JobRecord:
 
 
 def _job_path(settings: Settings, job_id: str) -> Path:
-    return _jobs_dir(settings) / f"{job_id}.json"
+    if not _JOB_ID.fullmatch(job_id):
+        raise ValueError("invalid job_id: use the opaque handle returned by extract_transcript")
+    root = _jobs_dir(settings).resolve()
+    path = root / f"{job_id}.json"
+    if path.resolve().parent != root:
+        raise ValueError("invalid job_id: job record is outside the configured job store")
+    return path
 
 
 def load_job(settings: Settings, job_id: str) -> JobRecord | None:
@@ -83,9 +120,15 @@ def load_job(settings: Settings, job_id: str) -> JobRecord | None:
 
 
 def _save_job(settings: Settings, rec: JobRecord) -> None:
-    _job_path(settings, rec.job_id).write_text(
-        json.dumps(rec.__dict__, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    path = _job_path(settings, rec.job_id)
+    temporary = path.with_suffix(f".{uuid.uuid4().hex}.tmp")
+    try:
+        temporary.write_text(
+            json.dumps(rec.__dict__, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _pid_alive(pid: int | None) -> bool:
@@ -164,14 +207,16 @@ def job_status(settings: Settings, rec: JobRecord) -> JobStatus:
             result=result,
         )
 
-    proc = _PROCS.get(rec.job_id)
-    if proc is not None:
-        if proc.poll() is None:
-            return JobStatus(status="running")
-        return JobStatus(
-            status="failed",
-            error=_log_tail(rec) or f"(ingest exited rc={proc.returncode} without a result file)",
-        )
+    with _PROCS_LOCK:
+        proc = _PROCS.get(rec.job_id)
+        if proc is not None:
+            returncode = proc.poll()
+            if returncode is None:
+                return JobStatus(status="running")
+            return JobStatus(
+                status="failed",
+                error=_log_tail(rec) or f"(ingest exited rc={returncode} without a result file)",
+            )
     # No in-memory handle (server restarted): fall back to a pid probe.
     if _pid_alive(rec.pid):
         return JobStatus(status="running")
@@ -205,14 +250,14 @@ def start_ingest_job(
     stdout, which is captured to a result file. Progress text goes to stderr and lands in the log,
     so the two streams never contaminate each other.
 
-    The subprocess inherits this process's env, same as running the CLI by hand. --no-vision +
+    The subprocess inherits credentials but uses the explicit Settings data paths. --no-vision +
     --no-frame-images keep the async job lean (frames are a separate concern surfaced by
     get_visual_context on a job that ran --ocr).
     """
     if mode not in _MODE_FLAGS:
         raise ValueError(f"unknown mode {mode!r}; expected one of {list(_MODE_FLAGS)}")
     canonical = select_provider(url).resolve(url)
-    job_id = uuid.uuid4().hex[:12]
+    job_id = uuid.uuid4().hex
     result_path = str(_jobs_dir(settings) / f"{job_id}.result.json")
     log_path = str(_jobs_dir(settings) / f"{job_id}.log")
     flags = _MODE_FLAGS[mode]
@@ -220,19 +265,26 @@ def start_ingest_job(
         sys.executable, "-m", "blisolver.cli", "ingest", url,
         "--no-vision", "--no-frame-images", "--json", *flags,
     ]
-    result_f = open(result_path, "w", encoding="utf-8")
-    log_f = open(log_path, "w", encoding="utf-8")
-    proc = subprocess.Popen(
-        cmd, stdout=result_f, stderr=log_f,
-        cwd=str(PROJECT_ROOT), env=os.environ.copy(),
-    )
+    env = os.environ.copy()
+    # The explicit store must win over inherited paths, including after a server rebuild.
+    env.update({
+        "BLISOLVER_DATA_DIR": str(settings.data_dir.resolve()),
+        "BLISOLVER_CACHE_DIR": str(settings.cache_dir.resolve()),
+        "BLISOLVER_OUT_DIR": str(settings.out_dir.resolve()),
+    })
+    with open(result_path, "w", encoding="utf-8") as result_f, \
+            open(log_path, "w", encoding="utf-8") as log_f:
+        proc = subprocess.Popen(
+            cmd, stdout=result_f, stderr=log_f, cwd=str(PROJECT_ROOT), env=env,
+        )
     rec = JobRecord(
         job_id=job_id, url=url, canonical_id=canonical.id, part=canonical.part,
         mode=mode, pid=proc.pid, started_at=time.time(),
         result_path=result_path, log_path=log_path,
     )
     _save_job(settings, rec)
-    _PROCS[job_id] = proc  # keep the handle so job_status can poll()/reap, not just os.kill
+    with _PROCS_LOCK:
+        _PROCS[job_id] = proc  # process-local optimization; job record is persisted above
     return rec
 
 
@@ -288,6 +340,30 @@ def get_visual_context_payload(bundle: dict) -> dict:
 
 # --- MCP server (MCPServer wrappers) ------------------------------------------------
 
+def _tool_result(payload: dict) -> CallToolResult:
+    """Preserve the tool payload for old callers while exposing failure on the MCP envelope."""
+    return CallToolResult(
+        content=[TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))],
+        structured_content=payload,
+        is_error=payload.get("status") in {"unknown", "failed", "expired"},
+    )
+
+
+def _poll_job(settings: Settings, job_id: str, reader) -> CallToolResult:
+    rec = load_job(settings, job_id)
+    if rec is None:
+        return _tool_result({"status": "unknown", "error": f"no job {job_id}"})
+    if time.time() >= rec.started_at + JOB_TTL_S:
+        return _tool_result({
+            "status": "expired",
+            "error": "job handle expired after 7 days; start a new extract_transcript job",
+        })
+    st = job_status(settings, rec)
+    if st.status != "done":
+        return _tool_result({"status": st.status, "error": st.error})
+    return _tool_result({"status": "done", **reader(_read_bundle(st.bundle_path))})
+
+
 def build_server(settings: Settings | None = None):
     """Build the MCPServer with all five tools registered. `settings` injectable for tests;
     default loads from env/.env."""
@@ -295,60 +371,58 @@ def build_server(settings: Settings | None = None):
 
     s = MCPServer("blisolver", version=__version__)
     _settings = settings or Settings.load()
+    poll_budget = _CallBudget(120)
+    probe_budget = _CallBudget(20)
+    start_budget = _CallBudget(4)
+    read_local = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 
-    @s.tool()
+    @s.tool(annotations=ToolAnnotations(read_only_hint=True, open_world_hint=True))
     def probe_video(url: str) -> dict:
         """Cheap pre-flight metadata probe (no media). Returns ProbeResult JSON: title, uploader,
         duration, parts, stats — enough to estimate ingest cost before committing."""
+        probe_budget.check()
         canonical = select_provider(url).resolve(url)
         return _probe(canonical, _settings).model_dump()
 
-    @s.tool()
-    def extract_transcript(url: str, mode: str = "auto") -> dict:
+    @s.tool(annotations=ToolAnnotations(
+        read_only_hint=False, destructive_hint=True, idempotent_hint=False, open_world_hint=True,
+    ))
+    def extract_transcript(
+        url: str, mode: Literal["auto", "force_whisper", "force_ocr"] = "auto"
+    ) -> dict:
         """Start an async ingest job. Returns {job_id, status:'running'} immediately. Poll
         get_transcript(job_id) until status=='done'. mode: 'auto' (CC->AI->whisper),
-        'force_whisper' (skip subs), 'force_ocr' (also run burned-in OCR)."""
+        'force_whisper' (skip subs), 'force_ocr' (also run burned-in OCR).
+        Handles expire 7 days after creation; expiry does not delete bundles or stop ingest.
+        Writes or replaces generated cache and bundle files; may download media and run models.
+        Each call starts a new job. Limit: 4 starts per minute per server process."""
+        start_budget.check()
         rec = start_ingest_job(url, mode, _settings)
         return {"job_id": rec.job_id, "status": "running", "canonical_id": rec.canonical_id,
                 "part": rec.part, "mode": rec.mode}
 
-    @s.tool()
-    def get_transcript(job_id: str) -> dict:
-        """Poll an ingest job. Returns {status, ...transcript} where status is running/done/failed.
+    @s.tool(annotations=read_local)
+    def get_transcript(job_id: JobId) -> CallToolResult:
+        """Poll an ingest job. Status is running/done/failed/unknown/expired.
         On done, carries the picked transcript (source, segments with per-cue provenance,
         quality_gate)."""
-        rec = load_job(_settings, job_id)
-        if rec is None:
-            return {"status": "unknown", "error": f"no job {job_id}"}
-        st = job_status(_settings, rec)
-        if st.status != "done":
-            return {"status": st.status, "error": st.error}
-        return {"status": "done", **get_transcript_payload(_read_bundle(st.bundle_path))}
+        poll_budget.check()
+        return _poll_job(_settings, job_id, get_transcript_payload)
 
-    @s.tool()
-    def get_timeline(job_id: str) -> dict:
+    @s.tool(annotations=read_local)
+    def get_timeline(job_id: JobId) -> CallToolResult:
         """Unified multi-source timeline for a done job: the picked transcript cues (with
         per-cue source/confidence) + the independent OCR track + fusion diagnostics. The view an
         Agent reasons over for authority ranking."""
-        rec = load_job(_settings, job_id)
-        if rec is None:
-            return {"status": "unknown", "error": f"no job {job_id}"}
-        st = job_status(_settings, rec)
-        if st.status != "done":
-            return {"status": st.status, "error": st.error}
-        return {"status": "done", **get_timeline_payload(_read_bundle(st.bundle_path))}
+        poll_budget.check()
+        return _poll_job(_settings, job_id, get_timeline_payload)
 
-    @s.tool()
-    def get_visual_context(job_id: str) -> dict:
+    @s.tool(annotations=read_local)
+    def get_visual_context(job_id: JobId) -> CallToolResult:
         """Visual context for a done job: slide-note frames (phash/caption/ocr) + the burned-in
         OCR track. Empty unless the job ran --vision (frames) or --ocr/--force-ocr (ocr)."""
-        rec = load_job(_settings, job_id)
-        if rec is None:
-            return {"status": "unknown", "error": f"no job {job_id}"}
-        st = job_status(_settings, rec)
-        if st.status != "done":
-            return {"status": st.status, "error": st.error}
-        return {"status": "done", **get_visual_context_payload(_read_bundle(st.bundle_path))}
+        poll_budget.check()
+        return _poll_job(_settings, job_id, get_visual_context_payload)
 
     return s
 

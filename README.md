@@ -112,6 +112,12 @@ does not rely on an MCP session to remember a job. BliSolver does not currently 
 sampling, or MCP protocol logging; introduce MRTR/`input_required` flows; or enable/declare the
 Tasks extension.
 
+Tool-level failures (including unknown or expired jobs) carry `isError: true`; polling returns
+matching structured and text JSON payloads. Job handles expire after seven days without deleting
+the bundles. Thread-safe admission limits protect probes, job starts, and polling. See the
+[MCP contract and specification audit](skills/blisolver-video-ingestion/references/mcp-contract.md)
+for exact limits, compatibility behavior, and offline wire-test coverage.
+
 ## 🚀 Usage
 
 ```bash

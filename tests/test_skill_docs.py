@@ -212,8 +212,13 @@ def test_every_doctor_stage_is_documented():
 
 def _registered_tool_names() -> set[str]:
     """Tool names as the server actually registers them, not as a list someone maintained."""
-    source = (PLUGIN_ROOT / "blisolver" / "mcp" / "server.py").read_text(encoding="utf-8")
-    return set(re.findall(r"@s\.tool\(\)\s*\n\s*def (\w+)", source))
+    import asyncio
+
+    from blisolver.config import Settings
+    from blisolver.mcp.server import build_server
+
+    # Introspect registration so decorators with annotations and explicit names work too.
+    return {tool.name for tool in asyncio.run(build_server(Settings()).list_tools())}
 
 
 def test_every_mcp_tool_is_documented():
