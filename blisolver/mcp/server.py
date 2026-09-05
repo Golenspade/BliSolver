@@ -41,6 +41,7 @@ from .. import __version__
 from ..config import PROJECT_ROOT, Settings
 from ..probe import probe as _probe
 from ..providers.base import select_provider
+from .guidance import SERVER_INSTRUCTIONS, register_guidance
 
 # --- job store -----------------------------------------------------------------------
 
@@ -369,8 +370,9 @@ def build_server(settings: Settings | None = None):
     default loads from env/.env."""
     from mcp.server import MCPServer
 
-    s = MCPServer("blisolver", version=__version__)
+    s = MCPServer("blisolver", version=__version__, instructions=SERVER_INSTRUCTIONS)
     _settings = settings or Settings.load()
+    register_guidance(s, _settings)
     poll_budget = _CallBudget(120)
     probe_budget = _CallBudget(20)
     start_budget = _CallBudget(4)
@@ -379,7 +381,8 @@ def build_server(settings: Settings | None = None):
     @s.tool(annotations=ToolAnnotations(read_only_hint=True, open_world_hint=True))
     def probe_video(url: str) -> dict:
         """Cheap pre-flight metadata probe (no media). Returns ProbeResult JSON: title, uploader,
-        duration, parts, stats — enough to estimate ingest cost before committing."""
+        duration, parts, stats — enough to estimate ingest cost before committing.
+        First read resources/read blisolver://guidance/SKILL.md for the workflow."""
         probe_budget.check()
         canonical = select_provider(url).resolve(url)
         return _probe(canonical, _settings).model_dump()
@@ -395,7 +398,8 @@ def build_server(settings: Settings | None = None):
         'force_whisper' (skip subs), 'force_ocr' (also run burned-in OCR).
         Handles expire 7 days after creation; expiry does not delete bundles or stop ingest.
         Writes or replaces generated cache and bundle files; may download media and run models.
-        Each call starts a new job. Limit: 4 starts per minute per server process."""
+        Each call starts a new job. Limit: 4 starts per minute per server process.
+        First read resources/read blisolver://guidance/SKILL.md for the workflow."""
         start_budget.check()
         rec = start_ingest_job(url, mode, _settings)
         return {"job_id": rec.job_id, "status": "running", "canonical_id": rec.canonical_id,

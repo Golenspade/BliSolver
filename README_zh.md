@@ -8,9 +8,24 @@
 
 ---
 
+## Agent 从这里开始
+
+**使用本仓库处理视频前，先读取 [blisolver-video-ingestion / SKILL.md](skills/blisolver-video-ingestion/SKILL.md)。**
+它给出运行时检查、探针、转录和产物验收的顺序；每一步只读取对应 reference，不要一次读完整个文档树。
+修改源码时同时遵守 [AGENTS.md](AGENTS.md)。
+
+- **刚 clone：** 直接读取上面的 Skill 即可开始；支持项目 Skill 的客户端还可发现
+  `.agents/skills/blisolver-video-ingestion`，它链接到同一份权威内容。
+- **安装插件：** 在支持 Agent Plugins 的客户端中安装/启用本仓库根目录。仅 clone 或连接 MCP
+  不等于安装 Skill；安装后检查客户端的技能目录，必要时刷新会话。
+- **仅连接 MCP：** 按服务 instructions 读取 `blisolver://guidance/SKILL.md`，再读取当前阶段的
+  resource；本地预检使用 `blisolver://runtime/doctor.json`。不要猜测工具名称或参数。
+
+客户端兼容性、目录层级与发现失败的处理见 [Agent 发现说明](skills/blisolver-video-ingestion/references/agent-discovery.md)。
+
 **BliSolver** 是为 **bilibili.com** 和 **YouTube** 打造的强大视频摄取工具（受上游 Harvest 启发）。给定一个视频 URL，它能生成一个时间轴对齐、自包含的**数据包 (Bundle)**：
 
-- 📝 **原声字幕** (复用平台高可信字幕，或降级使用 faster-whisper 离线转录)
+- 📝 **原声字幕** (复用平台高可信字幕，或降级使用 whisper.cpp 离线转录)
 - 🖼️ **逐帧视觉笔记** (通过本地视觉大模型实现 OCR + 图表/幻灯片描述)
 
 它的流程始于 URL，终于 `out/<安全的视频标题> [<id>-p<part>]/` 目录，其中包含 `bundle.md`、`bundle.json` 和 `frames/`。它**不会**在当前阶段做总结或实体提取 —— 这些工作交由下游的 Atlas 处理。
@@ -27,11 +42,11 @@ BliSolver 将每个数据源封装在一个 **Provider (提供程序)** 背后�
 
 ## 🛠️ 环境要求
 
-- **Python 3.11**
+- **Python 3.11+**
 - **ffmpeg** 需要在环境变量 PATH 中（被 yt-dlp 和帧提取阶段依赖）。
 - **JavaScript 运行时** (推荐 **deno**，或 node) 用于 **YouTube** — yt-dlp 需要它来驱动 YouTube 真实的 Web 播放器客户端。可从 PATH 自动检测，或检查标准安装位置。
 - **NVIDIA GPU** 或 **Apple Silicon** (Metal) 用于加速 Whisper 转录。
-- **LM Studio** 需在后台运行，并加载了视觉模型 (VL) 及其 mmproj 投影文件，用于视觉标注阶段。
+- **LM Studio** 仅视觉标注阶段需要，并加载视觉模型 (VL) 及其 mmproj；纯文本使用 `--no-vision --no-frame-images`。
 - **授权 (分数据源):**
   - **Bilibili:** 一个已登录的 **Chrome** 浏览器配置（默认；可用 `BLISOLVER_COOKIES_BROWSER` 覆盖），或使用 `SESSDATA` 作为备用方案。
   - **YouTube:** 公开视频无需授权；对于年龄限制或机器人检测视频，可选配置浏览器配置文件。
@@ -42,7 +57,7 @@ BliSolver 将每个数据源封装在一个 **Provider (提供程序)** 背后�
 `<venv>/bin/pip`。
 
 ```bash
-git clone https://github.com/alttina/BliSolver.git && cd BliSolver
+git clone https://github.com/Golenspade/BliSolver.git && cd BliSolver
 
 # 使用 uv
 uv venv .venv
@@ -52,7 +67,7 @@ uv pip install --python .venv/bin/python -e ".[mcp,frames,vision]"
 python3 -m venv .venv
 .venv/bin/pip install -e ".[mcp,frames,vision]"
 
-cp .env.example .env
+test -f .env || cp .env.example .env
 .venv/bin/blisolver doctor          # 在为媒体处理花钱之前先看清哪些能力就绪
 ```
 
@@ -68,6 +83,8 @@ GGML 权重文件，两者都不是 Python 包。`doctor` 会分别检查二进�
 
 ```text
 BliSolver/
+├── AGENTS.md        # repository agent entry
+├── .agents/skills/blisolver-video-ingestion -> ../../skills/blisolver-video-ingestion
 ├── plugin.json      # Agent Plugins 1.0.0 清单
 ├── mcp.json         # 一个 stdio MCP 服务
 ├── bin/blisolver-mcp
@@ -88,7 +105,7 @@ Copilot、Hermes Agent、Kiro、VS Code）。
   PATH 上已安装的 `blisolver` 依次解析。先完成上面的安装步骤，否则服务会退出并打印建环境的命令。
 - **凭据不放在清单里。** 规范把配置中的 `env` 值视为可见的包数据，而 `mcp.json` 是要提交的，所以
   `SESSDATA` 和 `LMSTUDIO_API_KEY` 必须来自环境变量或 `.env`。如果客户端清洗了环境变量，服务启动后
-  就没有 B 站会话，所有 B 站视频都会退回 Whisper。
+  可能无法取得需要登录的字幕；字幕不可用时会退回 Whisper，是否成功仍取决于本地 ASR。
 
 `mcp.json` 把 `BLISOLVER_DATA_DIR` 设为 `${PLUGIN_DATA}`，因此缓存和产物落在客户端管理的数据目录里，
 插件更新后仍然保留。
@@ -109,7 +126,7 @@ blisolver mcp
 | `--part N` | 处理指定的分 P (从 1 开始) |
 | `--all-parts` | 处理所有可用的分 P (Bilibili) |
 | `--force-whisper` | 跳过复用字幕，强制使用本地模型转录 |
-| `--lang CODE` | 指定转录/提取的语言 (在 Agent 环境中默认与用户的对话语言对齐) |
+| `--lang CODE` | 指定音频实际语言；不是对话语言或翻译目标，详见 Skill 的 CLI 契约 |
 | `--robust` | 禁用 `condition_on_previous_text` (适合重复性幻灯片课程) |
 | `--no-vision` | 跳过画面帧视觉标注 |
 | `--dedup-threshold N` | 用于去重的 pHash 汉明距离阈值 (默认值: 10) |

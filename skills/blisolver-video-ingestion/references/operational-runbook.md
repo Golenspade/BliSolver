@@ -10,7 +10,8 @@ python3 "$SCRIPTS/blisolver_cli.py" doctor
 ```
 
 Offline, no network, safe to run before anything expensive. Read the `stage` on each check to know
-what a warning costs. Exit 0 means nothing is blocking; exit 1 means a `core` check failed.
+what a warning costs. Exit 0 includes stage warnings; exit 1 means a `core` check failed. Inspect the checks required
+for the chosen operation, especially ASR fallback.
 
 If the wrapper itself exits 2, there is no usable Python yet. It prints the candidates it tried and
 the command to create one:
@@ -24,6 +25,25 @@ uv pip install --python <plugin-root>/.venv/bin/python -e "<plugin-root>[mcp]"
 ```
 
 `$BLISOLVER_PYTHON` overrides the search when the environment lives somewhere unusual.
+
+### Interpreting doctor
+
+| stage | checks | what a warning costs you |
+|---|---|---|
+| `core` | python, interpreter, plugin-manifest, ffmpeg, aria2c, javascript-runtime, cache-dir, out-dir | ffmpeg missing is fatal for every media stage; no JS runtime degrades YouTube extraction |
+| `auth` | provider-auth | missing login may prevent caption access; failed captions require Whisper fallback |
+| `transcript` | whisper-cli, whisper-model | the GGML weights are checked separately from the binary; a missing model fails *after* the audio download |
+| `vision` | vision-model | frame captioning cannot run; pass `--no-vision` |
+| `ocr` | ocr-isolate | `--ocr` degrades to a no-op |
+| `danmaku` | danmaku-model | `--danmaku` is accepted and then silently ignored |
+
+Exit code is 0 when nothing is blocking (warnings included) and 1 only when a `core` check failed.
+Credentials are reported as configured or not; values are never printed.
+
+
+A successful exit does not guarantee ASR readiness: `whisper-cli` and `whisper-model` warnings
+still prevent fallback transcription. Doctor may create cache/output directories and briefly
+write/delete a writability probe; it does not download media or invoke models.
 
 ## Stage prerequisites
 
@@ -48,9 +68,9 @@ The shipped default path is under `/tmp`, which is cleared on reboot. Point
 `BLISOLVER_WHISPER_MODEL` at a durable location if you intend to keep it. `doctor` warns about this
 specifically.
 
-Do not infer the ASR backend from `pyproject.toml`: the `transcribe` optional-dependency group still
-lists faster-whisper and CUDA wheels, while the implementation shells out to whisper.cpp. Read
-`blisolver/transcribe.py`.
+There is no `transcribe` extra. The implementation shells out to whisper.cpp; Python dependency
+installation does not install its binary or weights. Choose and configure a model deliberately;
+do not download the example medium model merely to make an unrelated preflight green.
 
 ## Cheap probe
 
@@ -72,7 +92,7 @@ python3 "$SCRIPTS/blisolver_cli.py" --show-command ingest 'https://...' --ocr
 Caption-first default, machine-readable result:
 
 ```bash
-python3 "$SCRIPTS/blisolver_cli.py" ingest 'https://www.bilibili.com/video/BV...' --json
+python3 "$SCRIPTS/blisolver_cli.py" ingest 'https://www.bilibili.com/video/BV...' --no-vision --no-frame-images --json
 ```
 
 Force local ASR and skip visual services:
@@ -101,9 +121,8 @@ Use `--part N` for one part; use `--all-parts` only when the extra acquisition c
 Take the path from the ingest envelope rather than constructing it:
 
 ```bash
-DIR=$(python3 "$SCRIPTS/blisolver_cli.py" ingest 'https://...' --json \
-      | python -c 'import json,sys; print(json.load(sys.stdin)["parts"][0]["bundle_dir"])')
-
+# RESULT_JSON is the saved stdout envelope from the completed ingest, not a new ingest.
+# Read its parts array and select a successful part; DIR is that part's exact bundle_dir.
 python3 "$SCRIPTS/inspect_bundle.py"  "$DIR" --pretty
 python3 "$SCRIPTS/validate_bundle.py" "$DIR"
 ```

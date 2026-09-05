@@ -24,6 +24,7 @@ root, which is three directories above `scripts/`. Every claim in this skill is 
 | fusion diagnostics | `blisolver/fuse.py` |
 | bundle rendering and the output directory name | `blisolver/merge.py` |
 | MCP tools and job lifecycle | `blisolver/mcp/server.py` |
+| lazy Skill resources and runtime preflight | `blisolver/mcp/guidance.py` |
 | how a client launches the MCP server | `mcp.json`, `bin/blisolver-mcp` |
 | plugin identity and metadata | `plugin.json` |
 | danmaku representation, interaction whitelist | `blisolver/danmaku.py`, `blisolver/interactions.py` |
@@ -36,6 +37,8 @@ Check a test before trusting prose. The offline suite is the fastest way to lear
 |---|---|
 | does the package satisfy Agent Plugins 1.0.0? | `tests/test_agent_plugin.py` |
 | what do the skill's scripts guarantee? | `tests/test_portable_skill.py` |
+| clone discovery and relocated runtime | `tests/test_agent_entry.py` |
+| modern/legacy MCP guidance and lazy reading | `tests/test_mcp_guidance.py` |
 | what does `ingest --json` promise, and where does state go? | `tests/test_ingest_contract.py` |
 | what does the censorship fallback record? | `tests/test_censorship_fallback.py` |
 | what does preflight actually check? | `tests/test_doctor.py` |
@@ -53,8 +56,8 @@ not runtime discovery sources.
 
 ## Known stale statements elsewhere in the repository
 
-* `pyproject.toml` still declares a `transcribe` optional-dependency group containing faster-whisper
-  and NVIDIA CUDA wheels. The implementation is whisper.cpp via `whisper-cli`. The group is vestigial.
+* Some historical setup prose names faster-whisper or a `transcribe` extra. Current
+  `pyproject.toml` has no such extra; the implementation uses whisper.cpp via `whisper-cli`.
 * Older prose describes schema 1.0. Current bundles are 1.1, with per-cue provenance and
   `Bundle.ocr`.
 * Historical bilibili-only descriptions predate the YouTube provider.

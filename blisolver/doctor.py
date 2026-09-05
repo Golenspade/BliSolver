@@ -237,8 +237,8 @@ def _ocr_check(settings: Settings) -> Check:
     return Check(
         "ocr-isolate", WARN, OCR,
         "hard-subtitle OCR unavailable: " + "; ".join(missing) + ". --ocr degrades to a no-op. "
-        "Set up with: uv venv .ocr-venv && "
-        ".ocr-venv/bin/pip install rapidocr-onnxruntime opencv-python",
+        "From the repository root, set up with: uv venv .ocr-venv && "
+        "uv pip install --python .ocr-venv/bin/python rapidocr-onnxruntime opencv-python",
     )
 
 

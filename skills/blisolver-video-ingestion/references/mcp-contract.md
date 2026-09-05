@@ -1,8 +1,39 @@
 # MCP contract
 
-Verified against `blisolver/mcp/server.py` and `mcp.json`. This surface had no reference at all
-before, while `source-map.md` pointed readers at the source file — which is why the job lifecycle
-below was invisible to anyone using the skill.
+Verified against `blisolver/mcp/server.py`, `blisolver/mcp/guidance.py`, and `mcp.json`.
+
+## Read guidance and preflight before tools
+
+The server's short instructions (modern discovery or legacy initialization) and probe/start tool
+descriptions point to `blisolver://guidance/SKILL.md`. Use `resources/read` to read it, then only the
+reference needed for the current stage; this contract's URI is
+`blisolver://guidance/references/mcp-contract.md`. `resources/list` exposes metadata, not all bodies.
+These are core MCP resources, not an implementation of the draft Skills extension.
+
+Read `blisolver://runtime/doctor.json` for the server's offline prerequisites. It can create local
+cache/output directories and briefly write/delete a writability probe. It does not download media,
+call external models or extract browser cookies. A warning about whisper-cli/weights means ASR
+fallback is unavailable, even if the report's overall status is not an error. Read the operational
+runbook when setup is needed. If the host hides resources, use the local Skill files and CLI doctor,
+or have the host expose/attach these resources; do not invent a doctor tool.
+
+## Minimal transcript workflow
+
+1. Complete preflight, then call `probe_video` with `{"url": "<actual URL or BV ID>"}`. Replace
+   the placeholder with the user's or an observed value. Inspect duration, parts and subtitles.
+2. Call `extract_transcript` with that same `url` and `mode: "auto"` for caption-first text.
+   Caption availability does not prove acceptance; auto can download audio and invoke Whisper.
+3. Preserve the exact returned `job_id`. Call `get_transcript` with `{"job_id": "<returned handle>"}`.
+   While running, wait about 5 seconds between polls, increasing to 15–30 seconds for long runs;
+   honor any rate-limit retry delay. This delay is a usage recommendation, not a protocol rule.
+4. On done, inspect `segments`, `language`, `source_reason` and `quality_gate`. On failed, unknown
+   or expired, stop polling and use the reported error. Never invent a handle or restart implicitly.
+
+The start tool accepts only `url` and `mode`. A Bilibili URL may select a part through its `p` query;
+there is no `part`, `lang`, `all_parts`, or `output` argument. Use the CLI when language, all-parts,
+vision or output controls are needed. In particular the Bilibili ASR default is `zh`, and YouTube
+omits whisper-cli's language argument; do not infer actual audio language from either default.
+MCP has no subtitle-only mode. Missing ASR prerequisites can still block a caption-first job.
 
 ## When to use MCP instead of the CLI
 
@@ -172,7 +203,8 @@ states that configured `env` values are visible package data and must not carry 
 `mcp.json` is committed to the repository.
 
 Consequence worth knowing: a client that sanitizes the ambient environment will start a server with
-no bilibili session, and every bilibili video will degrade to Whisper. Diagnose with
+no explicit bilibili session. Captions requiring login may be unavailable; when captions fail,
+Whisper fallback still requires a working local ASR runtime. Diagnose with
 `blisolver doctor`, whose `provider-auth` check reports presence without printing values.
 
 ## Failure isolation

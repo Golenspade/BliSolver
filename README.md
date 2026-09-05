@@ -8,9 +8,28 @@
 
 ---
 
+## Agents: start here
+
+**Before operating on a video, read [blisolver-video-ingestion / SKILL.md](skills/blisolver-video-ingestion/SKILL.md).**
+It routes runtime checks, probing, transcription and output verification. Load only the reference
+needed for the current stage, not the whole documentation tree. For source edits also follow
+[AGENTS.md](AGENTS.md).
+
+- **Fresh clone:** read that Skill directly. Project-skill clients can also discover
+  `.agents/skills/blisolver-video-ingestion`, a link to the same canonical content.
+- **Plugin install:** install/enable this repository root in an Agent Plugins-compatible host.
+  Cloning or connecting MCP does not install a Skill. Verify the host's skill catalog and refresh
+  the session if necessary.
+- **MCP only:** follow the server instructions to read `blisolver://guidance/SKILL.md`, then the
+  current stage's resource. Offline preflight is `blisolver://runtime/doctor.json`.
+  Use advertised tool schemas; do not invent tool names or arguments.
+
+See [agent discovery](skills/blisolver-video-ingestion/references/agent-discovery.md) for directory
+layout, host support and discovery troubleshooting.
+
 **BliSolver** is a robust video ingestion tool for **bilibili.com** and **YouTube** (inspired by the BliSolver pipeline). It produces a timeline-aligned, self-contained **bundle** from a given video URL:
 
-- 📝 **Original-language transcript** (Reuses trustworthy platform captions, or falls back to faster-whisper)
+- 📝 **Original-language transcript** (Reuses trustworthy platform captions, or falls back to whisper.cpp)
 - 🖼️ **Per-frame visual notes** (OCR + figure/slide captions via a local vision model)
 
 It starts at a URL and ends at `out/<sanitized_title> [<id>-p<part>]/` containing `bundle.md`, `bundle.json`, and `frames/`. It does **not** summarize or extract entities — that lives downstream in Atlas.
@@ -27,11 +46,12 @@ BliSolver encapsulates each source behind a **provider** and turns the result in
 
 ## 🛠️ Prerequisites
 
-- **Python 3.11**
+- **Python 3.11+**
 - **ffmpeg** on PATH (used by yt-dlp and the frame stage).
 - **A JavaScript runtime** (**deno** recommended, or node) for **YouTube** — yt-dlp needs one to drive YouTube's real web player client. Auto-detected from PATH or standard install locations.
 - **NVIDIA GPU** or **Apple Silicon** (Metal) for fast whisper transcription.
-- **LM Studio** running with a VL model and its mmproj loaded for the vision stage.
+- **LM Studio** with a VL model and its mmproj for the optional vision stage. Text-only runs use
+  `--no-vision --no-frame-images` and do not need it.
 - **Auth (per source):**
   - **bilibili:** A logged-in **Chrome** profile (default; override with `BLISOLVER_COOKIES_BROWSER`), or a `SESSDATA` fallback.
   - **YouTube:** None for public videos; optionally a browser profile to unlock age-gated/bot-checked content.
@@ -42,7 +62,7 @@ Either interpreter path works. `uv venv` does **not** install `pip` into the env
 `uv pip` rather than `<venv>/bin/pip` when you take the uv route.
 
 ```bash
-git clone https://github.com/alttina/BliSolver.git && cd BliSolver
+git clone https://github.com/Golenspade/BliSolver.git && cd BliSolver
 
 # with uv
 uv venv .venv
@@ -52,7 +72,7 @@ uv pip install --python .venv/bin/python -e ".[mcp,frames,vision]"
 python3 -m venv .venv
 .venv/bin/pip install -e ".[mcp,frames,vision]"
 
-cp .env.example .env
+test -f .env || cp .env.example .env
 .venv/bin/blisolver doctor          # verify what is ready before spending on media
 ```
 
@@ -69,6 +89,8 @@ beside the application, so a compatible client can load the skill and the MCP se
 
 ```text
 BliSolver/
+├── AGENTS.md        # repository agent entry
+├── .agents/skills/blisolver-video-ingestion -> ../../skills/blisolver-video-ingestion
 ├── plugin.json      # Agent Plugins 1.0.0 manifest
 ├── mcp.json         # one stdio MCP server
 ├── bin/blisolver-mcp
@@ -92,7 +114,8 @@ Two things are worth knowing before you wire it up:
 - **Credentials are not in the manifest.** The specification treats configured `env` values as
   visible package data, and `mcp.json` is committed, so `SESSDATA` and `LMSTUDIO_API_KEY` must come
   from the environment or `.env`. A client that sanitizes the environment will start a server with
-  no bilibili session, and every bilibili video will fall back to Whisper.
+  no explicit bilibili session. Captions requiring login may be unavailable; Whisper fallback
+  still needs a working local ASR runtime.
 
 `mcp.json` sets `BLISOLVER_DATA_DIR` to `${PLUGIN_DATA}`, so caches and bundles land in the
 client-managed data directory and survive a plugin update.
@@ -132,7 +155,7 @@ blisolver probe  <url>
 | `--part N` | Process a specific part index (1-based) |
 | `--all-parts` | Process every available part (bilibili) |
 | `--force-whisper` | Skip caption reuse, always transcribe |
-| `--lang CODE` | Pin transcription language (defaults to agent/user conversational language) |
+| `--lang CODE` | Set the spoken language, not conversation/translation language; see the Skill CLI contract |
 | `--robust` | Disable `condition_on_previous_text` (good for repetition-loop lectures) |
 | `--no-vision` | Skip frame captioning |
 | `--dedup-threshold N` | pHash hamming distance to collapse near-duplicate frames (default: 10) |

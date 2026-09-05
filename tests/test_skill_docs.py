@@ -187,24 +187,24 @@ def test_credentials_are_never_shown_being_passed_on_a_command_line():
 
 
 def test_every_doctor_check_is_documented():
-    """SKILL.md tabulates the checks by stage. A new check that is not listed leaves a reader
+    """The on-demand runbook tabulates checks by stage. A missing check would leave a reader
     unable to interpret its warning."""
     from blisolver.config import Settings
     from blisolver.doctor import run
 
-    skill = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+    skill = (SKILL / "references" / "operational-runbook.md").read_text(encoding="utf-8")
     missing = [c.name for c in run(Settings()).checks if c.name not in skill]
-    assert not missing, f"doctor checks absent from SKILL.md: {missing}"
+    assert not missing, f"doctor checks absent from operational-runbook.md: {missing}"
 
 
 def test_every_doctor_stage_is_documented():
     from blisolver.config import Settings
     from blisolver.doctor import run
 
-    skill = (SKILL / "SKILL.md").read_text(encoding="utf-8")
+    skill = (SKILL / "references" / "operational-runbook.md").read_text(encoding="utf-8")
     stages = {c.stage for c in run(Settings()).checks}
     missing = [s for s in stages if f"`{s}`" not in skill]
-    assert not missing, f"doctor stages absent from SKILL.md: {missing}"
+    assert not missing, f"doctor stages absent from operational-runbook.md: {missing}"
 
 
 # --- MCP surface ---------------------------------------------------------------------------

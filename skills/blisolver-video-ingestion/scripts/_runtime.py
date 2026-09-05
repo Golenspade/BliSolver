@@ -25,9 +25,10 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from shlex import quote
 
 # skills/<skill-name>/scripts/_runtime.py -> plugin root
 PLUGIN_ROOT = Path(__file__).resolve().parents[3]
@@ -119,8 +120,10 @@ def resolve_runtime(explicit_root: str | None = None) -> Runtime:
         "no interpreter with blisolver's dependencies was found.\n"
         f"Tried, in order:\n{attempted}\n  installed          blisolver on PATH\n"
         f"Create the environment once, with either:\n"
-        f"  uv venv {root}/.venv && uv pip install --python {root}/.venv/bin/python -e '{root}[mcp]'\n"
-        f"  python3 -m venv {root}/.venv && {root}/.venv/bin/pip install -e '{root}[mcp]'\n"
+        f"  uv venv {quote(str(root / '.venv'))} && uv pip install --python "
+        f"{quote(str(root / '.venv/bin/python'))} -e {quote(str(root) + '[mcp]')}\n"
+        f"  python3 -m venv {quote(str(root / '.venv'))} && "
+        f"{quote(str(root / '.venv/bin/pip'))} install -e {quote(str(root) + '[mcp]')}\n"
         f"(`uv venv` does not install pip into the environment, so `python -m pip` will not work "
         f"there; use `uv pip` as above.)"
     )

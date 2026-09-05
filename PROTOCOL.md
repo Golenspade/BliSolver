@@ -16,6 +16,14 @@ requests are self-describing and do not require `initialize`; `server/discover`,
 list cache hints are handled by the SDK. BliSolver does not enable the Tasks extension: `job_id`
 is explicit application state, persisted under the configured data directory.
 
+The server also exposes core MCP resources for progressive guidance: read
+`blisolver://guidance/SKILL.md`, then only the needed `blisolver://guidance/references/<name>.md`.
+Listing resources returns metadata; reading returns one canonical Skill document. Server
+instructions and the probe/start tool descriptions advertise the entry. The offline preflight
+resource `blisolver://runtime/doctor.json` reports the server's prerequisites and may create local
+directories and write/delete permission probes. It does not fetch media or invoke models.
+These resources do not claim the draft Skills extension or force host-side Skill activation.
+
 The three polling tools (`get_transcript`, `get_timeline`, `get_visual_context`) return matching
 `structuredContent` and serialized JSON text. `status: running` or `done` is a successful tool
 result. `unknown`, `failed`, and `expired` return **`isError: true`**. Invalid mode/handle inputs

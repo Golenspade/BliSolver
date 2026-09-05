@@ -5,6 +5,14 @@
 - BliSolver acquires and normalizes bilibili.com and YouTube videos into Atlas bundles.
 - Keep acquisition deterministic. Summarization, entity extraction, and other interpretation belong downstream in Atlas.
 
+## Operating This Repository
+
+For runtime diagnosis, video probing/ingestion, or bundle inspection, first read
+[the ingestion Skill](skills/blisolver-video-ingestion/SKILL.md), then only the reference for the
+current stage. Do not preload all references. `.agents/skills/blisolver-video-ingestion` links to
+that same canonical skill; do not maintain a second copy. Source-only maintenance uses the source
+map below and does not require loading the entire operating workflow.
+
 ## Sources of Truth
 
 When sources disagree, trust current source and tests; then `PROTOCOL.md`; then `SPEC.md` and the root `README.md` where they agree with code; then `CONTEXT.md`. Dated files under `docs/` are history and rationale only.
@@ -46,7 +54,8 @@ The wrapper integration tests require the repository-local `.venv`. `tests/test_
 ## Agent Plugin, Skill, and MCP Constraints
 
 - The repository root is the Agent Plugins root: keep `plugin.json`, `mcp.json`, `bin/`, `blisolver/`, and `skills/` co-located.
-- Keep the Agent Plugins schema versions in `plugin.json` and `mcp.json` identical. Skills are discovered only at `skills/<name>/SKILL.md`.
+- Keep the Agent Plugins schema versions in `plugin.json` and `mcp.json` identical. Agent Plugins discovers skills at `skills/<name>/SKILL.md`; the `.agents/skills/` alias serves
+  project-skill discovery in hosts that support that convention.
 - Keep a stdio MCP `command` as one executable token. Persist generated state under `${PLUGIN_DATA}` and never put credentials in package configuration.
 - The server uses Python SDK 2.x (`mcp>=2,<3`) and `MCPServer`. It serves modern MCP `2026-07-28` and retains SDK-provided compatibility with legacy `2025-11-25` clients.
 - The transport remains stdio, so do not add the HTTP-only `stateless_http` option. Modern protocol dispatch is stateless, while BliSolver application state remains explicit: callers pass `job_id`, and generated job records live under `${PLUGIN_DATA}` rather than an MCP session.

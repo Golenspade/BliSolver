@@ -50,6 +50,34 @@ is what makes `ingest --json` parseable and what keeps the MCP stdio transport c
 | `--force-ocr` | with `--ocr`, skip pre-detection and always run the dense sample |
 | `--json` | emit the result envelope on stdout |
 
+## Choosing a transcript-only command
+
+`VIDEO_URL` below must be the actual user-provided or observed URL/BV ID; do not execute placeholders.
+Set `SCRIPTS` as described in SKILL.md. Preflight first, then:
+
+```bash
+python3 "$SCRIPTS/blisolver_cli.py" probe "$VIDEO_URL"
+python3 "$SCRIPTS/blisolver_cli.py" --show-command ingest "$VIDEO_URL" --no-vision --no-frame-images --json
+python3 "$SCRIPTS/blisolver_cli.py" ingest "$VIDEO_URL" --no-vision --no-frame-images --json
+```
+
+Only the last command runs ingestion. `--show-command` is an argument preview, not a readiness or
+URL validation. The CLI otherwise enables vision by default. It has no subtitle-only mode: even a
+caption-first run can fall back to ASR after subtitle fetching/quality checks.
+
+### Language must come from the audio, not the conversation
+
+`--lang` reaches whisper-cli as its expected spoken language. It does not translate. On Bilibili
+it does not select a subtitle track; on YouTube it also selects a caption language, so a translated
+human track can be mistaken for original-language content if the wrong language is requested.
+
+The application defaults to `zh` on Bilibili. On YouTube it omits whisper-cli's language argument;
+although CLI help calls that auto-detection, the upstream whisper-cli default can be English. Do
+not rely on that help text as measured language detection. If the spoken language is known, pass
+its code explicitly; use `--lang auto` for ASR detection when it is unknown, then verify the actual
+text. `transcript.language` may record the requested setting rather than measured recognition.
+The MCP start tool has no `lang` parameter; use the CLI when explicit language control is needed.
+
 ## `ingest --json` envelope
 
 ```json
@@ -131,7 +159,8 @@ is why bundles belong there rather than under the package. `mcp.json` sets `BLIS
 
 * `transcript` — the single authoritative picked transcript. `source` is `human-sub`, `auto-sub`, or
   `whisper`; `source_reason` is the human-readable decision and is promoted into the `bundle.md`
-  header; `language` is the language actually delivered; `quality_gate` is populated only when a
+  header; `language` records the caption language or requested ASR language setting;
+  `quality_gate` is populated only when a
   subtitle track was evaluated.
 * `ocr` — burned-in subtitle cues on an independent timeline, or null. Distinct from `Frame.ocr`.
 * `frames` — timestamp, phash, optional caption/OCR, and a bundle-relative image path or null.
@@ -144,8 +173,10 @@ bundles. A transcript cue carries `human-sub`/`auto-sub`/`whisper`; a burned-in 
 
 ### Reading language honestly
 
-`transcript.language` is the language of the delivered text, and `bundle.md` carries it as
-`transcript_language`. They can differ from the video's actual language: bilibili's Chinese ASR
+`transcript.language` is the recorded language field, and `bundle.md` carries it as
+`transcript_language`. For captions it comes from the delivered track; for Whisper it can be the
+requested setting (`auto` or null included), not measured recognition. Check actual cues as well.
+Even a concrete caption language can differ from the video's actual language: bilibili's Chinese ASR
 track is sometimes returned redacted, and acquisition then falls through to a foreign-language
 track.
 
