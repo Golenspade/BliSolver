@@ -35,6 +35,83 @@ WHISPER_MODEL = os.environ.get("BLISOLVER_WHISPER_MODEL", "/tmp/ggml-medium.bin"
 WHISPER_CLI = os.environ.get("BLISOLVER_WHISPER_CLI", shutil.which("whisper-cli") or "whisper-cli")
 
 
+class ASRPreflightError(RuntimeError):
+    """Local ASR cannot start; no media or model inference is needed to diagnose this."""
+
+
+def whisper_model_path() -> str:
+    """Resolve after Settings.load so values from .env are visible as well."""
+    return os.environ.get("BLISOLVER_WHISPER_MODEL", WHISPER_MODEL)
+
+
+def validate_whisper_cli() -> str:
+    """Resolve a regular executable without launching it or loading a model."""
+    configured = os.environ.get("BLISOLVER_WHISPER_CLI", WHISPER_CLI)
+    resolved = shutil.which(configured)
+    candidate = Path(resolved or configured)
+    if not candidate.is_file() or not os.access(candidate, os.X_OK):
+        problem = "not executable" if candidate.exists() else "missing"
+        raise ASRPreflightError(
+            f"whisper-cli {problem}: {configured!r}. Install/build whisper.cpp and set "
+            "BLISOLVER_WHISPER_CLI to its executable whisper-cli path (or add it to PATH)."
+        )
+    return str(candidate.resolve())
+
+
+def validate_whisper_model(model: str | None = None) -> Path:
+    """Check readability and the GGML header, not full tensor integrity or model quality.
+
+    whisper.cpp starts its model with uint32 magic 0x67676d6c followed by eleven int32
+    hyperparameters. Read only that fixed header; never map the weights or start inference.
+    """
+    path = Path(whisper_model_path() if model is None else model)
+    problem = None
+    try:
+        if not path.is_file():
+            problem = "missing" if not path.exists() else "not a regular file"
+        else:
+            with path.open("rb") as stream:
+                header = stream.read(48)
+                size = os.fstat(stream.fileno()).st_size
+            if len(header) < 48 or size <= 48:
+                problem = "empty or truncated GGML header/model"
+            elif header[:4] != b"lmgg":
+                problem = "invalid GGML magic (not a whisper.cpp GGML model)"
+    except OSError as exc:
+        problem = f"unreadable ({exc.strerror or type(exc).__name__})"
+    if problem:
+        warning = (
+            " /tmp may be cleared on reboot; choose a durable model path."
+            if str(path).startswith("/tmp/") else ""
+        )
+        raise ASRPreflightError(
+            f"whisper-model {problem}: {path}. Set BLISOLVER_WHISPER_MODEL to a readable "
+            "whisper.cpp GGML model file. Download fresh medium weights to a new file with: "
+            "curl -fL -o /path/to/new-ggml-medium.bin "
+            "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin; "
+            "then set BLISOLVER_WHISPER_MODEL to that path."
+            + warning
+        )
+    return path
+
+
+def require_whisper_runtime(model: str | None = None) -> str:
+    """Raise one actionable error listing every failed dependency before spending on audio."""
+    failures = []
+    executable = ""
+    try:
+        executable = validate_whisper_cli()
+    except ASRPreflightError as exc:
+        failures.append(str(exc))
+    try:
+        validate_whisper_model(model)
+    except ASRPreflightError as exc:
+        failures.append(str(exc))
+    if failures:
+        raise ASRPreflightError("Local ASR preflight failed: " + " ".join(failures))
+    return executable
+
+
 def download_audio(canonical: Canonical, settings: Settings) -> Path:
     """Download + cache bestaudio for the part. `transcribe` downmixes it to 16 kHz mono first."""
     key = fs_key(canonical.platform, canonical.id, canonical.part)
@@ -124,7 +201,7 @@ def _to_wav16k(audio_path: Path, settings: Settings) -> Path:
 
 
 def transcribe(
-    audio_path: Path, *, robust: bool = False, model: str = WHISPER_MODEL, lang: str | None = None
+    audio_path: Path, *, robust: bool = False, model: str | None = None, lang: str | None = None
 ) -> list[Segment]:
     """Run whisper.cpp on `audio_path` and return timestamped segments.
 
@@ -135,6 +212,8 @@ def transcribe(
     """
     from .config import Settings as _S  # local import to avoid a module-cycle at import time
     settings = _S.load()
+    model = whisper_model_path() if model is None else model
+    executable = require_whisper_runtime(model)
     wav = _to_wav16k(audio_path, settings)
 
     # whisper-cli writes SRT to <output-prefix>.srt; use a temp prefix in the cache dir.
@@ -143,7 +222,7 @@ def transcribe(
     if srt_path.exists():
         srt_path.unlink()
 
-    cmd = [WHISPER_CLI, "-m", model, "-f", str(wav), "-of", str(out_prefix), "-osrt"]
+    cmd = [executable, "-m", model, "-f", str(wav), "-of", str(out_prefix), "-osrt"]
     if lang:
         cmd += ["-l", lang]
     # robust => disable condition_on_previous_text (whisper.cpp: --max-context 0)

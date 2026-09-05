@@ -43,4 +43,7 @@ def probe(canonical: Canonical, settings: Settings, *, opener=None) -> ProbeResu
         part_durations_s=meta.part_durations_s,
         original_language=meta.original_language,
         available_subtitles=meta.available_subtitles,
+        status="partial" if meta.warnings else "ok",
+        subtitle_status=meta.subtitle_status,
+        warnings=meta.warnings,
     )

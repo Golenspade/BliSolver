@@ -41,6 +41,7 @@ from .. import __version__
 from ..config import PROJECT_ROOT, Settings
 from ..probe import probe as _probe
 from ..providers.base import select_provider
+from ..transcribe import require_whisper_runtime
 from .guidance import SERVER_INSTRUCTIONS, register_guidance
 
 # --- job store -----------------------------------------------------------------------
@@ -257,6 +258,10 @@ def start_ingest_job(
     """
     if mode not in _MODE_FLAGS:
         raise ValueError(f"unknown mode {mode!r}; expected one of {list(_MODE_FLAGS)}")
+    if mode == "force_whisper":
+        # A short URL may need network resolution. Diagnose forced local ASR before that,
+        # before creating job files, and before launching an inevitably failing child.
+        require_whisper_runtime()
     canonical = select_provider(url).resolve(url)
     job_id = uuid.uuid4().hex
     result_path = str(_jobs_dir(settings) / f"{job_id}.result.json")
@@ -379,13 +384,13 @@ def build_server(settings: Settings | None = None):
     read_local = ToolAnnotations(read_only_hint=True, open_world_hint=False)
 
     @s.tool(annotations=ToolAnnotations(read_only_hint=True, open_world_hint=True))
-    def probe_video(url: str) -> dict:
+    def probe_video(url: str) -> CallToolResult:
         """Cheap pre-flight metadata probe (no media). Returns ProbeResult JSON: title, uploader,
         duration, parts, stats — enough to estimate ingest cost before committing.
         First read resources/read blisolver://guidance/SKILL.md for the workflow."""
         probe_budget.check()
         canonical = select_provider(url).resolve(url)
-        return _probe(canonical, _settings).model_dump()
+        return _tool_result(_probe(canonical, _settings).model_dump())
 
     @s.tool(annotations=ToolAnnotations(
         read_only_hint=False, destructive_hint=True, idempotent_hint=False, open_world_hint=True,

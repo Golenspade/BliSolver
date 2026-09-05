@@ -70,7 +70,7 @@ There is no bare-url form. Supported sources: `bilibili.com`, `youtube.com`.
 
 ## `probe` — pre-flight metadata
 
-- Takes **only** a URL — no other flags apply.
+- Takes a URL or a complete bare BV identifier (`BV` plus ten alphanumeric characters).
 - **stdout carries the JSON result and nothing else** (one line, safe to pipe into a parser).
 - Diagnostics/errors go to **stderr**. Exit **0** on success, **1** on failure (stderr:
   `error: <message>`, stdout empty).
@@ -93,6 +93,18 @@ There is no bare-url form. Supported sources: `bilibili.com`, `youtube.com`.
 | `stats` | object | yes | engagement snapshot @ `fetched_at`; see `Stats` shape below |
 | `parts` | integer | no | number of parts (always ≥ 1; YouTube always 1) |
 | `part_durations_s` | array of (integer or null) | — | one entry per part, index-aligned to part 1..N; entries may be `null` |
+| `original_language` | string | yes | best-effort language hint |
+| `available_subtitles` | array of object | no | discovered tracks with `code`, `source` (`human-sub`/`auto-sub`), and nullable `title`; inspect `subtitle_status` before interpreting an empty list |
+| `status` | string | no | `ok` or `partial`; additive, defaults to `ok` |
+| `subtitle_status` | string | no | `available`, `none`, `error`, or `unknown`; defaults to `unknown` |
+| `warnings` | array of object | no | safe diagnostics: `stage`, `code`, `message`, nullable `http_status`, and `retryable`; defaults to `[]` |
+
+If bilibili metadata succeeds but subtitle discovery fails, the probe returns exit 0 with
+`status=partial`, `subtitle_status=error`, and an explicit warning. HTTP 403/412/429 uses
+`code=subtitle_access_blocked`; pause requests and verify configured login before retrying.
+An empty candidate list in this case is not evidence of absent subtitles or a reason to start ASR.
+MCP preserves this usable partial result with `isError=false`; JSON text and `structuredContent`
+carry the same record. `retryable` permits a later retry, not an immediate retry loop.
 
 ### `Stats` shape (matches `schema.py::Stats`)
 
@@ -135,7 +147,7 @@ Engagement metrics, all nullable, all optional integers:
 
 ### Nulls are normal, not exceptional
 
-`probe` reports best-effort metadata from a single upstream call. Any of `title`, `uploader`,
+`probe` reports best-effort metadata from provider requests. Any of `title`, `uploader`,
 `uploader_id`, `description`, `duration_s`, `published_at`, `thumbnail_url`, or any field inside
 `stats` may be `null` on an otherwise-successful call. `part_durations_s` is always present and
 length-aligned to `parts`, but individual entries may be `null`. **Atlas must tolerate all of these
@@ -146,6 +158,13 @@ as `null`/missing, not as failures.**
 probe data for this URL."
 
 ## `ingest` — bundle output
+
+With `--json`, stdout is reserved for the result envelope; yt-dlp progress, external aria2c
+diagnostics, and configuration warnings go to stderr. A forced-ASR dependency failure occurs
+before canonical URL resolution: CLI exits 1 with stderr and empty stdout; MCP returns a tool
+error before creating a job. When automatic fallback needs an uncached transcript, it checks
+the runtime before audio download and keeps per-part failure isolation. These offline checks
+validate an executable and a readable GGML header, not complete weights or a working GPU.
 
 Output is `out/<sanitized_title> [<id>-p<part>]/` containing `bundle.md`, `bundle.json`, and
 `frames/`. The directory name carries the sanitized video title, so **it is not derivable from

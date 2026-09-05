@@ -30,6 +30,7 @@ def _stub_whisper_cli(monkeypatch, tmp_path, *, lang=None, robust=False):
     monkeypatch.setattr(T, "_to_wav16k", lambda p, s: p)  # skip the real downmix
     monkeypatch.setattr(Settings, "load", lambda: Settings())
     monkeypatch.setattr(T, "WHISPER_CLI", "whisper-cli")
+    monkeypatch.setattr(T, "require_whisper_runtime", lambda model=None: "whisper-cli")
     return audio, captured
 
 

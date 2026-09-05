@@ -14,6 +14,7 @@ root, which is three directories above `scripts/`. Every claim in this skill is 
 | provider registry and the normalized seam | `blisolver/providers/base.py` |
 | URL normalization (title prefixes, embeds, b23.tv) | `blisolver/resolve.py` |
 | bilibili acquisition and auth | `blisolver/providers/bilibili.py`, `blisolver/player_api.py` |
+| partial probe, subtitle discovery status and safe errors | `blisolver/probe.py`, `blisolver/providers/diagnostics.py` |
 | candidate track order, censorship fallback, `track_language` | `blisolver/subtitles.py` |
 | quality gate, including its language adaptation | `blisolver/quality.py` |
 | YouTube acquisition and caption tiers | `blisolver/providers/youtube.py`, `blisolver/providers/youtube_autosub.py` |
@@ -38,6 +39,9 @@ Check a test before trusting prose. The offline suite is the fastest way to lear
 | does the package satisfy Agent Plugins 1.0.0? | `tests/test_agent_plugin.py` |
 | what do the skill's scripts guarantee? | `tests/test_portable_skill.py` |
 | clone discovery and relocated runtime | `tests/test_agent_entry.py` |
+| bare BV and explicit partial probe diagnostics | `tests/test_probe_diagnostics.py` |
+| real local yt-dlp stdout isolation | `tests/test_download_streams.py` |
+| ASR readiness before downloading or converting audio | `tests/test_asr_preflight.py` |
 | modern/legacy MCP guidance and lazy reading | `tests/test_mcp_guidance.py` |
 | what does `ingest --json` promise, and where does state go? | `tests/test_ingest_contract.py` |
 | what does the censorship fallback record? | `tests/test_censorship_fallback.py` |

@@ -106,6 +106,19 @@ class SubtitleTrackInfo(BaseModel):
     title: str | None = None
 
 
+SubtitleDiscoveryStatus = Literal["available", "none", "error", "unknown"]
+
+
+class ProbeWarning(BaseModel):
+    """Safe, actionable diagnostics for an incomplete metadata probe."""
+
+    stage: Literal["subtitles"] = "subtitles"
+    code: str
+    message: str
+    http_status: int | None = None
+    retryable: bool = False
+
+
 class ProbeResult(BaseModel):
     """Cheap pre-flight metadata (no transcript/frames): lets Atlas estimate workload before
     committing to the full pipeline."""
@@ -126,6 +139,9 @@ class ProbeResult(BaseModel):
     part_durations_s: list[int | None] = Field(default_factory=list)
     original_language: str | None = None
     available_subtitles: list[SubtitleTrackInfo] = Field(default_factory=list)
+    status: Literal["ok", "partial"] = "ok"
+    subtitle_status: SubtitleDiscoveryStatus = "unknown"
+    warnings: list[ProbeWarning] = Field(default_factory=list)
 
 
 class DanmakuLine(BaseModel):

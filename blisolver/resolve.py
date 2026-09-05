@@ -31,6 +31,11 @@ def extract_url(text: str) -> str:
     match = _URL_RE.search(text)
     url = match.group(1) if match else text.strip()
 
+    # Only a complete standalone BV identifier is shorthand for a Bilibili URL.
+    # Do not guess an ID from arbitrary prose or from an incomplete prefix.
+    if re.fullmatch(r"BV[0-9A-Za-z]{10}", url):
+        return f"https://www.bilibili.com/video/{url}"
+
     if url.startswith("//"):
         url = "https:" + url
 

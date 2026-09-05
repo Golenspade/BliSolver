@@ -13,6 +13,8 @@ blisolver mcp
 ```
 
 There is no bare-URL form; a URL without a verb is an argument error.
+The URL argument accepts a complete standalone `BV` identifier (12 characters, case-sensitive)
+after `probe` or `ingest`; truncated IDs or IDs buried in prose are not guessed.
 
 Reach these through `scripts/blisolver_cli.py`, which resolves an interpreter that owns the
 dependencies and then forwards arguments verbatim. The wrapper adds exactly two options of its own,
@@ -51,6 +53,20 @@ is what makes `ingest --json` parseable and what keeps the MCP stdio transport c
 | `--json` | emit the result envelope on stdout |
 
 ## Choosing a transcript-only command
+
+### Inspect probe completeness
+
+`probe` returns `status: "ok"` or `"partial"`. Its `subtitle_status` distinguishes `available`,
+`none` (discovery succeeded with no candidates), `error` (discovery failed), and `unknown`
+(not established by this provider/result). `warnings[]` carries `stage`, `code`, `message`,
+`http_status` and `retryable`. A partial probe still exits 0 and retains usable metadata;
+inspect these fields before starting ingestion. HTTP 403/412/429 means pause and diagnose access,
+not that the video has no subtitles. `retryable` permits a later retry, never a tight retry loop.
+
+Forced ASR checks the executable and model before provider resolution or media work. Auto mode
+can use captions or an existing transcript cache without Whisper; when new ASR is required it
+checks before downloading audio. A GGML header check detects missing/invalid files but does not
+prove that every model tensor is valid.
 
 `VIDEO_URL` below must be the actual user-provided or observed URL/BV ID; do not execute placeholders.
 Set `SCRIPTS` as described in SKILL.md. Preflight first, then:

@@ -145,6 +145,9 @@ def ydl_opts(
     opts: dict = {
         "skip_download": skip_download,
         "quiet": True,
+        # quiet suppresses status messages, but yt-dlp's download progress uses a separate
+        # stream. Reserve stdout for CLI envelopes / MCP JSON-RPC even while downloading.
+        "logtostderr": True,
         "no_warnings": True,
         "http_headers": headers,
         # bilibili CDN can be slow/flaky; be patient and resume partials.
@@ -160,6 +163,8 @@ def ydl_opts(
             "aria2c": [
                 "-x16", "-s16", "-k1M", "--retry-wait=2", "--max-tries=10",
                 "--disable-ipv6=true",  # Akamai mirrors resolve to unreachable IPv6 on this box
+                # aria2c inherits OS stdout; yt-dlp's logtostderr cannot redirect the child.
+                "--stderr=true",
             ]
         }
     else:

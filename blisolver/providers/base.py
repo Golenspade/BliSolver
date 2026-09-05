@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
-from ..schema import Platform, QualityGate, Segment
+from ..schema import Platform, ProbeWarning, QualityGate, Segment, SubtitleDiscoveryStatus
 
 
 @dataclass(frozen=True)
@@ -53,6 +53,8 @@ class SourceMetadata:
     share_count: int | None = None      # bilibili-only
     reply_count: int | None = None      # bilibili-only
     danmaku_count: int | None = None    # bilibili-only
+    subtitle_status: SubtitleDiscoveryStatus = "unknown"
+    warnings: list[ProbeWarning] = field(default_factory=list)
 
 
 @dataclass

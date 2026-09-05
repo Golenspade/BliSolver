@@ -79,6 +79,9 @@ test -f .env || cp .env.example .env
 There is no `transcribe` extra: local ASR runs whisper.cpp through the external `whisper-cli`
 binary plus a GGML model file, neither of which is a Python package. `doctor` checks the binary and
 the weights separately, and prints the command to fetch the weights if they are missing.
+Forced ASR validates these dependencies before URL expansion or job creation; uncached automatic
+ASR fallback validates them before audio download. See the [operational runbook](skills/blisolver-video-ingestion/references/operational-runbook.md)
+for setup and the limits of these checks.
 
 > **Note:** Configure `.env` with your LM Studio endpoint/model and per-source auth. Never commit your `.env`.
 
@@ -166,7 +169,12 @@ blisolver probe  <url>
 
 ### 🔍 Probe
 
-`probe` takes only a URL and prints a single-line JSON `ProbeResult` to stdout (including title, uploader, duration, parts, `original_language`, and `available_subtitles`) so a caller can estimate workload before an `ingest` run.
+`probe` takes a URL or a complete bare BV identifier and prints a single-line JSON `ProbeResult` to stdout (including title, uploader, duration, parts, `original_language`, and `available_subtitles`) so a caller can estimate workload before an `ingest` run.
+Read `status`, `subtitle_status`, and `warnings` too: `partial` with a subtitle access error retains
+metadata but does not establish that subtitles are absent. Pause on HTTP 403/412/429 before choosing ASR.
+
+The [10-video knowledge/Vlog candidate bucket](docs/testing/video-bucket-20260905.md) is available
+for staged testing; information density and transcription accuracy have not yet been measured.
 
 ## 📖 Output format
 

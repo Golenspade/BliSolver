@@ -21,7 +21,13 @@ from .player_api import ViewError
 from .probe import probe
 from .providers.base import Canonical, select_provider
 from .schema import SCHEMA_VERSION, Frame, Segment, Transcript
-from .transcribe import WHISPER_MODEL, download_audio, transcribe
+from .transcribe import (
+    ASRPreflightError,
+    download_audio,
+    require_whisper_runtime,
+    transcribe,
+    whisper_model_path,
+)
 
 # NOTE: `probe` here is the metadata pre-flight probe (probe.py), used by the `probe` CLI verb
 # and overridable as `cli.probe` in tests. Platform-specific subtitle acquisition + the quality
@@ -179,10 +185,11 @@ def _whisper(canonical, settings, args, *, reason, gate=None, lang=None) -> Tran
     # `-l` flag. Omitting it meant a re-run with a different --lang returned the previous
     # language's transcript from cache, silently, with no indication that the flag had been
     # ignored.
+    model = whisper_model_path()
     key = fs_key(
         canonical.platform, canonical.id, canonical.part,
         stage="transcript", force_whisper=args.force_whisper,
-        robust=args.robust, model=WHISPER_MODEL, lang=lang or "auto",
+        robust=args.robust, model=model, lang=lang or "auto",
     )
     cached = load_json(settings.cache_dir, "transcript", key)
     if cached is not None:
@@ -197,16 +204,17 @@ def _whisper(canonical, settings, args, *, reason, gate=None, lang=None) -> Tran
             f"({len(segments)} seg, cached): {reason}"
         )
     else:
+        require_whisper_runtime(model)
         _log(f"[{canonical.id} p{canonical.part}] whisper: {reason} -> downloading audio...")
         audio = download_audio(canonical, settings)
-        _log(f"[{canonical.id} p{canonical.part}] transcribing {audio.name} ({WHISPER_MODEL})...")
-        segments = transcribe(audio, robust=args.robust, lang=lang)
+        _log(f"[{canonical.id} p{canonical.part}] transcribing {audio.name} ({model})...")
+        segments = transcribe(audio, robust=args.robust, model=model, lang=lang)
         save_json(settings.cache_dir, "transcript", key, [s.model_dump() for s in segments])
     return Transcript(
         source="whisper",
         source_reason=reason,
         language=lang,
-        model=WHISPER_MODEL,
+        model=model,
         robust=args.robust,
         quality_gate=gate,
         segments=segments,
@@ -221,6 +229,8 @@ def process_part(canonical: Canonical, settings: Settings, args) -> dict:
     every consumer that tried (the MCP job store, the skill's documented `out/<id>-p<part>` path)
     was reading a directory that stopped existing. The producer now reports the location it chose.
     """
+    if args.force_whisper:
+        require_whisper_runtime()
     provider = select_provider(canonical.url)
     meta = provider.fetch_metadata(canonical, settings)
     transcript = decide_transcript(canonical, meta, settings, args)
@@ -398,7 +408,16 @@ def _run_probe(args) -> int:
 def _run_ingest(args) -> int:
     settings = Settings.load()
     for w in apply_overrides(settings, args):
-        print(f"[warn] {w}")
+        _log(f"[warn] {w}")
+
+    # Resolution may itself use the network (short URLs), before per-part work begins.
+    # Forced ASR therefore needs its mandatory local dependencies even before resolve.
+    if args.force_whisper:
+        try:
+            require_whisper_runtime()
+        except ASRPreflightError as exc:
+            _log(f"error: {exc}")
+            return 1
 
     try:
         canonical = select_provider(args.url).resolve(args.url)

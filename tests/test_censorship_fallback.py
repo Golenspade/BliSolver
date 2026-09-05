@@ -241,12 +241,12 @@ def test_transcript_cache_key_includes_the_language(tmp_path, monkeypatch):
     """
     from blisolver import cli
     from blisolver.cache import fs_key
-    from blisolver.transcribe import WHISPER_MODEL
+    from blisolver.transcribe import whisper_model_path
 
     def key_for(lang: str | None) -> str:
         return fs_key(
             "bilibili.com", "BV1", 1, stage="transcript", force_whisper=False,
-            robust=False, model=WHISPER_MODEL, lang=lang or "auto",
+            robust=False, model=whisper_model_path(), lang=lang or "auto",
         )
 
     assert key_for("zh") != key_for("en")
@@ -256,7 +256,8 @@ def test_transcript_cache_key_includes_the_language(tmp_path, monkeypatch):
     calls: list[str] = []
     monkeypatch.setattr(cli, "load_json", lambda cache, stage, key: calls.append(key) or None)
     monkeypatch.setattr(cli, "download_audio", lambda c, s: tmp_path / "a.m4a")
-    monkeypatch.setattr(cli, "transcribe", lambda audio, robust=False, lang=None: [])
+    monkeypatch.setattr(cli, "require_whisper_runtime", lambda model=None: "whisper-cli")
+    monkeypatch.setattr(cli, "transcribe", lambda audio, robust=False, lang=None, model=None: [])
     monkeypatch.setattr(cli, "save_json", lambda *a, **k: None)
 
     settings = Settings()

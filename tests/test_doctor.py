@@ -47,6 +47,7 @@ def test_report_shape_is_stable_and_every_check_declares_a_stage():
 
 
 def test_missing_whisper_model_is_reported_even_when_the_binary_exists(monkeypatch, tmp_path):
+    monkeypatch.delenv("BLISOLVER_WHISPER_MODEL", raising=False)
     monkeypatch.setattr("blisolver.transcribe.WHISPER_MODEL", str(tmp_path / "absent.bin"))
     check = doctor._whisper_model_check()
     assert check.status == doctor.WARN
@@ -57,7 +58,8 @@ def test_missing_whisper_model_is_reported_even_when_the_binary_exists(monkeypat
 
 def test_present_whisper_model_reports_its_size(monkeypatch, tmp_path):
     model = tmp_path / "ggml.bin"
-    model.write_bytes(b"\0" * 2048)
+    model.write_bytes(b"lmgg" + b"\0" * 2044)
+    monkeypatch.delenv("BLISOLVER_WHISPER_MODEL", raising=False)
     monkeypatch.setattr("blisolver.transcribe.WHISPER_MODEL", str(model))
     check = doctor._whisper_model_check()
     assert check.status == doctor.OK
@@ -67,7 +69,9 @@ def test_present_whisper_model_reports_its_size(monkeypatch, tmp_path):
 def test_tmp_model_path_warns_about_volatility(monkeypatch):
     """The shipped default lives under /tmp, which is cleared on reboot. A warning that omits this
     sends the operator round the same loop every restart."""
-    monkeypatch.setattr("blisolver.transcribe.WHISPER_MODEL", "/tmp/ggml-medium.bin")
+    monkeypatch.setenv("BLISOLVER_WHISPER_MODEL", "/tmp/blisolver-missing-test-model/ggml.bin")
+    monkeypatch.setattr("blisolver.transcribe.Path.is_file", lambda self: False)
+    monkeypatch.setattr("blisolver.transcribe.Path.exists", lambda self: False)
     check = doctor._whisper_model_check()
     assert check.status == doctor.WARN
     assert "reboot" in check.detail

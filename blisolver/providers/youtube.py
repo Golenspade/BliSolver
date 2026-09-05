@@ -103,6 +103,7 @@ class YouTubeProvider:
             thumbnail_url=info.get("thumbnail"),
             original_language=info.get("language"),
             available_subtitles=subs,
+            subtitle_status="available" if subs else "none",
             view_count=info.get("view_count"),
             like_count=info.get("like_count"),
         )

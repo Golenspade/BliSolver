@@ -65,6 +65,7 @@ correct interpreter independently of the caller's working directory; setup failu
    unless the user requests another or all parts. `bilibili.tv` is unsupported.
 3. **Probe:** use CLI `probe` or MCP `probe_video` for metadata, without downloading media.
    Inspect duration, parts and subtitle candidates. Candidates do not prove quality-gate acceptance.
+   Check `status`, `subtitle_status` and `warnings`; a failed discovery is not proof of no captions.
 4. **Run:** for text only, CLI uses `--no-vision --no-frame-images --json`; MCP uses
    `extract_transcript` with `mode="auto"`. Preview CLI arguments with `--show-command` before a
    costly run; that only displays the command, it does not validate the URL or model. Force ASR

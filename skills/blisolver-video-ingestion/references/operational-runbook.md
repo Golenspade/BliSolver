@@ -31,8 +31,8 @@ uv pip install --python <plugin-root>/.venv/bin/python -e "<plugin-root>[mcp]"
 | stage | checks | what a warning costs you |
 |---|---|---|
 | `core` | python, interpreter, plugin-manifest, ffmpeg, aria2c, javascript-runtime, cache-dir, out-dir | ffmpeg missing is fatal for every media stage; no JS runtime degrades YouTube extraction |
-| `auth` | provider-auth | missing login may prevent caption access; failed captions require Whisper fallback |
-| `transcript` | whisper-cli, whisper-model | the GGML weights are checked separately from the binary; a missing model fails *after* the audio download |
+| `auth` | provider-auth | missing login may prevent caption access; an access error does not establish that captions are absent |
+| `transcript` | whisper-cli, whisper-model | executable and readable GGML header are checked separately; missing/invalid dependencies stop ASR before audio download |
 | `vision` | vision-model | frame captioning cannot run; pass `--no-vision` |
 | `ocr` | ocr-isolate | `--ocr` degrades to a no-op |
 | `danmaku` | danmaku-model | `--danmaku` is accepted and then silently ignored |
@@ -57,16 +57,23 @@ write/delete a writability probe; it does not download media or invoke models.
 | burned-in OCR | an isolated environment | `uv venv .ocr-venv && uv pip install --python .ocr-venv/bin/python rapidocr-onnxruntime opencv-python` |
 | danmaku | `BLISOLVER_DANMAKU_MODEL` | LM Studio model id |
 
-The ASR model is checked separately from the binary because having one says nothing about the other:
+The ASR model is checked separately from the binary because having one says nothing about the other.
+Build/install `whisper-cli` using the [upstream instructions](https://github.com/ggml-org/whisper.cpp),
+then set `BLISOLVER_WHISPER_CLI` to that executable. Use Metal on Apple Silicon or a CUDA build
+on an NVIDIA host. The following is an optional model download example, not a required preflight step:
 
 ```bash
-curl -sL -o /tmp/ggml-medium.bin \
+curl -fL -o /tmp/ggml-medium.bin \
   https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin
 ```
 
 The shipped default path is under `/tmp`, which is cleared on reboot. Point
 `BLISOLVER_WHISPER_MODEL` at a durable location if you intend to keep it. `doctor` warns about this
 specifically.
+
+Forced ASR checks dependencies before URL expansion or job creation. Caption-first ingestion checks
+them only when an uncached ASR fallback is needed, before audio download; an existing transcript
+cache remains usable. Header checks do not certify full tensor integrity, GPU availability, or accuracy.
 
 There is no `transcribe` extra. The implementation shells out to whisper.cpp; Python dependency
 installation does not install its binary or weights. Choose and configure a model deliberately;
@@ -80,6 +87,11 @@ python3 "$SCRIPTS/blisolver_cli.py" probe 'https://www.youtube.com/watch?v=...' 
 
 Parse `probe.json` only; diagnostics are on stderr. Nonzero exit means there is no trustworthy
 record. Null metadata fields in a successful probe are normal.
+
+Also inspect `status`, `subtitle_status`, and `warnings`: exit 0 can carry `status=partial` with
+usable metadata but failed subtitle discovery. `subtitle_status=none` means discovery completed
+without candidates; `error` or `unknown` does not. For HTTP 403/412/429, pause requests, check the
+configured browser login, and retry later; do not start ASR merely because the list is empty.
 
 ## Ingest recipes
 
@@ -139,7 +151,8 @@ referenced image existence. Null frame paths are valid under `--no-frame-images`
 | `.tv` unsupported error | use a `bilibili.com` URL; `.tv` is deferred |
 | YouTube missing title or subtitles | install deno or node; keep public extraction cookie-free first |
 | bilibili 403/412, or no captions offered | verify the logged-in browser profile without printing it; preserve referer behavior |
-| ASR fails after the audio download | `doctor` and read `whisper-model`; the weights are probably absent |
+| `Local ASR preflight failed` | run `doctor`; install/configure the named binary/model dependencies before retrying |
+| ASR runtime fails after a successful preflight | read the job stderr; preflight checks executable/header only, so GPU allocation or deeper model corruption can still fail |
 | vision projector check fails | bind the model's mmproj in LM Studio; do not bypass by trusting captions |
 | `--ocr` did nothing | `doctor` and read `ocr-isolate`; `--force-ocr` only helps once the isolate exists |
 | `--danmaku` did nothing | set `BLISOLVER_DANMAKU_MODEL`; the track is bilibili-only and opt-in |

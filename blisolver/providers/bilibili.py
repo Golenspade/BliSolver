@@ -30,6 +30,7 @@ from ..subtitles import (
 )
 from ..subtitles import probe as subtitle_probe
 from .base import Canonical, SourceMetadata, SubtitleOutcome, register
+from .diagnostics import subtitle_discovery_warning
 
 
 class BilibiliProvider:
@@ -59,6 +60,8 @@ class BilibiliProvider:
     def fetch_metadata(self, canonical, settings, *, opener=None) -> SourceMetadata:
         view = fetch_view(canonical, settings, opener=opener)
         subs = []
+        warnings = []
+        subtitle_status = "none"
         try:
             info = extract_info(canonical.url, settings)
             sub_dict = info.get("subtitles") or {}
@@ -67,8 +70,10 @@ class BilibiliProvider:
                 if source is None:
                     continue  # not a caption (e.g. bilibili's `danmaku` overlay track)
                 subs.append({"code": k, "source": source, "title": k})
-        except Exception:
-            pass
+            subtitle_status = "available" if subs else "none"
+        except Exception as exc:  # noqa: BLE001 - preserve metadata with explicit discovery failure
+            subtitle_status = "error"
+            warnings.append(subtitle_discovery_warning(exc))
 
         return SourceMetadata(
             platform=canonical.platform,
@@ -93,6 +98,8 @@ class BilibiliProvider:
             #     trust — see subtitles.Acquisition.describe_fallback.
             original_language="zh" if canonical.platform == "bilibili.com" else None,
             available_subtitles=subs,
+            subtitle_status=subtitle_status,
+            warnings=warnings,
             view_count=view.view_count,
             like_count=view.like_count,
             coin_count=view.coin_count,

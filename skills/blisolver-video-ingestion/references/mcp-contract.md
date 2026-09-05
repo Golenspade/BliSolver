@@ -21,6 +21,9 @@ or have the host expose/attach these resources; do not invent a doctor tool.
 
 1. Complete preflight, then call `probe_video` with `{"url": "<actual URL or BV ID>"}`. Replace
    the placeholder with the user's or an observed value. Inspect duration, parts and subtitles.
+   If `status="partial"` or `subtitle_status="error"`, read `warnings[]` before starting a job.
+   An empty subtitle list in that result does not establish absence. Pause on HTTP 403/412/429;
+   fix access or wait before a deliberate later retry.
 2. Call `extract_transcript` with that same `url` and `mode: "auto"` for caption-first text.
    Caption availability does not prove acceptance; auto can download audio and invoke Whisper.
 3. Preserve the exact returned `job_id`. Call `get_transcript` with `{"job_id": "<returned handle>"}`.
@@ -97,6 +100,10 @@ Five tools. One is synchronous and cheap; the rest are a start-then-poll pair se
 ### `probe_video(url) -> ProbeResult`
 
 Synchronous, no media. Same payload as `blisolver probe`. Use it to estimate cost before committing.
+The result is duplicated in `structuredContent` and JSON text. Partial metadata remains a
+successful tool response (`isError=false`) with `status="partial"`, `subtitle_status="error"`,
+and safe structured `warnings` (code/message/http_status/retryable). Usable metadata is retained;
+the explicit status distinguishes failed subtitle discovery from a successful empty discovery.
 
 ### `extract_transcript(url, mode="auto") -> {job_id, status, canonical_id, part, mode}`
 

@@ -18,7 +18,6 @@ value. `SESSDATA`, `LMSTUDIO_API_KEY`, and cookie contents are reported as prese
 
 from __future__ import annotations
 
-import shutil
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -157,16 +156,13 @@ def _js_runtime_check(settings: Settings) -> Check:
 
 
 def _whisper_cli_check() -> Check:
-    from .transcribe import WHISPER_CLI
+    from .transcribe import ASRPreflightError, validate_whisper_cli
 
-    resolved = shutil.which(WHISPER_CLI) or (WHISPER_CLI if Path(WHISPER_CLI).is_file() else None)
-    if resolved:
-        return Check("whisper-cli", OK, TRANSCRIPT, resolved)
-    return Check(
-        "whisper-cli", WARN, TRANSCRIPT,
-        f"{WHISPER_CLI!r} not found; override with BLISOLVER_WHISPER_CLI. Needed only when no "
-        f"usable subtitle track is accepted and the pipeline falls back to local ASR",
-    )
+    try:
+        resolved = validate_whisper_cli()
+    except ASRPreflightError as exc:
+        return Check("whisper-cli", WARN, TRANSCRIPT, str(exc))
+    return Check("whisper-cli", OK, TRANSCRIPT, resolved)
 
 
 def _whisper_model_check() -> Check:
@@ -176,21 +172,18 @@ def _whisper_model_check() -> Check:
     path lives under /tmp, so it disappears on reboot; without this check the failure surfaces
     only after the audio download has already been paid for.
     """
-    from .transcribe import WHISPER_MODEL
+    from .transcribe import ASRPreflightError, validate_whisper_model
 
-    path = Path(WHISPER_MODEL)
-    if path.is_file():
+    try:
+        path = validate_whisper_model()
         size_mb = path.stat().st_size / (1024 * 1024)
-        return Check("whisper-model", OK, TRANSCRIPT, f"{path} ({size_mb:.0f} MB)")
-    warning = ""
-    if str(path).startswith("/tmp/"):
-        warning = " Note: /tmp is cleared on reboot; set BLISOLVER_WHISPER_MODEL to a durable path."
+    except ASRPreflightError as exc:
+        return Check("whisper-model", WARN, TRANSCRIPT, str(exc))
+    except OSError as exc:
+        return Check("whisper-model", WARN, TRANSCRIPT, f"model became unavailable: {exc}")
     return Check(
-        "whisper-model", WARN, TRANSCRIPT,
-        f"GGML model missing at {path}. Local ASR will fail after the audio download. Fetch it "
-        f"with: curl -sL -o {path} "
-        f"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin"
-        f"{warning}",
+        "whisper-model", OK, TRANSCRIPT,
+        f"{path} ({size_mb:.0f} MB; readable GGML header, full weights not validated)",
     )
 
 
