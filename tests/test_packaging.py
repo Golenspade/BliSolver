@@ -32,6 +32,7 @@ IMPORT_NAME = {
     "pyyaml": "yaml",
     "yt-dlp": "yt_dlp",
     "faster-whisper": "faster_whisper",
+    "opencc-python-reimplemented": "opencc",
 }
 
 # Declared for the test suite and tooling rather than imported by the application.

@@ -371,7 +371,7 @@ def _poll_job(settings: Settings, job_id: str, reader) -> CallToolResult:
 
 
 def build_server(settings: Settings | None = None):
-    """Build the MCPServer with all five tools registered. `settings` injectable for tests;
+    """Build the MCPServer with ingest and songcut tools. `settings` injectable for tests;
     default loads from env/.env."""
     from mcp.server import MCPServer
 
@@ -433,6 +433,8 @@ def build_server(settings: Settings | None = None):
         poll_budget.check()
         return _poll_job(_settings, job_id, get_visual_context_payload)
 
+    from ..songcut.mcp import register as register_songcut
+    register_songcut(s, _settings, start_budget, poll_budget, _tool_result)
     return s
 
 

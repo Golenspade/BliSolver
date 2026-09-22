@@ -30,6 +30,8 @@ EXPECTED_TOOL_ORDER = [
     "get_transcript",
     "get_timeline",
     "get_visual_context",
+    "make_songcut",
+    "get_songcut",
 ]
 
 
@@ -84,7 +86,7 @@ def test_modern_tools_list_carries_cache_hints(tmp_path: Path) -> None:
     ("mode", "expected_protocol_version"),
     [("auto", MODERN_PROTOCOL_VERSION), ("legacy", LEGACY_PROTOCOL_VERSION)],
 )
-@pytest.mark.parametrize("tool", EXPECTED_TOOL_ORDER[2:])
+@pytest.mark.parametrize("tool", EXPECTED_TOOL_ORDER[2:5])
 def test_tool_call_works_in_modern_and_legacy_modes(
     tmp_path: Path, mode: str, expected_protocol_version: str, tool: str
 ) -> None:
@@ -154,14 +156,14 @@ def test_tools_describe_side_effects_and_mode_constraints(tmp_path: Path) -> Non
     assert start.annotations.idempotent_hint is False
     assert start.annotations.open_world_hint is True
     assert "7 days" in start.description
-    for name in EXPECTED_TOOL_ORDER[2:]:
+    for name in EXPECTED_TOOL_ORDER[2:5]:
         assert tools[name].annotations.read_only_hint is True
         assert tools[name].annotations.open_world_hint is False
         assert tools[name].input_schema["properties"]["job_id"]["maxLength"] == 64
 
 
 @pytest.mark.parametrize("mode", ["auto", "legacy"])
-@pytest.mark.parametrize("tool", EXPECTED_TOOL_ORDER[2:])
+@pytest.mark.parametrize("tool", EXPECTED_TOOL_ORDER[2:5])
 @pytest.mark.parametrize("state", ["running", "done", "failed", "expired"])
 def test_persisted_jobs_are_readable_without_the_creating_server(
     tmp_path: Path, mode: str, tool: str, state: str, monkeypatch,

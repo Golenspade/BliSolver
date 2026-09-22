@@ -27,10 +27,52 @@
 
 - 📝 **原声字幕** (复用平台高可信字幕，或降级使用 whisper.cpp 离线转录)
 - 🖼️ **逐帧视觉笔记** (通过本地视觉大模型实现 OCR + 图表/幻灯片描述)
+- 🎵 **制作歌切**：音频切段、同录音去重、响度与峰值质检，以及可选的云端转写和现场歌词制作。
 
 它的流程始于 URL，终于 `out/<安全的视频标题> [<id>-p<part>]/` 目录，其中包含 `bundle.md`、`bundle.json` 和 `frames/`。它**不会**在当前阶段做总结或实体提取 —— 这些工作交由下游的 Atlas 处理。
 
 详细设计请参见 [SPEC.md](SPEC.md)，向 Atlas 交付的数据契约请参考 [PROTOCOL.md](PROTOCOL.md)。
+
+## 制作歌切
+
+新增 `songcut` 管线，支持 **BV / 视频 URL、本地音视频、JSON 批次清单**。完整流程为：
+
+**获取源音频与来源证据 → 按范围切段 → 同录音指纹与稠密窗口去重 → 音频制作 → 成品响度/峰值复测 → 全文件转写 → 疑难短窗补查 → 演唱候选判断 → 参考歌词比对 → 现场歌词整理与口播复核 → 交付质检制品。**
+
+```bash
+uv pip install --python .venv/bin/python -e ".[songcut,mcp]"
+.venv/bin/blisolver songcut /path/to/source.wav --start 12 --end 200 --out out/my-song --json
+```
+
+默认输出 48 kHz 双声道 AAC；使用恒定增益保留动态，若峰值约束使响度达不到目标，质检报告会标明。
+需要动态压缩时显式使用 `--normalization dynamic`。原始文件保留，内部使用 24-bit PCM 制作。
+输入整场录播时，由时间范围或清单指定各首歌，不自动猜测歌名、演唱者或歌曲边界。
+
+云端部分接入 **DashScope Filetrans、Flash、Omni**，也支持本机 `whisper.cpp`。
+先在本地 `.env` 或秘密环境中配置 `DASHSCOPE_API_KEY`，并按
+[完整使用说明](skills/blisolver-video-ingestion/references/songcut.md) 配置私有 S3 兼容存储，再执行：
+
+```bash
+# 只看计划，不下载、不调用模型
+.venv/bin/blisolver songcut /path/to/source.wav --backend dashscope --budget-cny 2 --out out/my-song --plan
+# 运行全音频与云端歌词链
+.venv/bin/blisolver songcut /path/to/source.wav --backend dashscope --budget-cny 2 --out out/my-song --json
+```
+
+- `--backend none`：默认只制作音频、去重和质检。
+- `--backend whisper`：本机转写，保留片段级时间证据。
+- `--backend dashscope`：全文件字词转写、独立短窗补查、演唱候选判断、歌词分句及口播复核。
+- `--reference-audio /path/to/existing.m4a`：与已有录音比较；可重复传入。
+- `--reference-lyrics lyrics.txt`：使用本地参考歌词；`--title "歌名" --lookup-lyrics` 可选调用 LRCLIB。
+
+每曲生成 `audio.m4a`、`lyrics.lrc`、`lyrics.txt`、歌词候选、原始转写、字词证据、来源信息、去重证据和质检报告。
+歌词绑定最终音频 SHA-256，时间来自本次演唱的识别结果，不照搬标准歌词时间轴。同录音命中保留音频和证据，跳过重复 ASR，不继承另一版本歌词。
+生成歌词与演唱判断均保持 **draft / 待审**；处理完成不代表已逐曲听审。专辑、封面与站点发布继续由下游管理。
+
+使用相同 `--out` 重跑即可恢复；单曲失败不终止同批其它曲目。云端调用先预留预算、保存任务 ID，再轮询结果；
+收费提交结果不明时不自动重发。预算按可配置单价估算，并非供应商账单保证；在输出根目录放置 `STOP` 文件可阻止新的收费请求，已提交任务仍可收取结果。
+MCP 提供 `make_songcut` 和 `get_songcut`。批次清单、临时上传选项、完整参数与恢复规则见
+[制作歌切指南](skills/blisolver-video-ingestion/references/songcut.md)。
 
 ## 🌟 为什么需要专属工具？
 

@@ -19,6 +19,7 @@ root, which is three directories above `scripts/`. Every claim in this skill is 
 | quality gate, including its language adaptation | `blisolver/quality.py` |
 | YouTube acquisition and caption tiers | `blisolver/providers/youtube.py`, `blisolver/providers/youtube_autosub.py` |
 | ASR backend and its flags | `blisolver/transcribe.py` |
+| Songcut CLI, inputs, stages, cloud receipts and live lyrics | `blisolver/songcut/` |
 | frame extraction and phash dedup | `blisolver/frames.py` |
 | LM Studio and projector verification | `blisolver/vision.py` |
 | burned-in OCR | `blisolver/detect_hardsubs.py`, `blisolver/ocr.py`, `scripts/ocr_worker.py` |
@@ -48,6 +49,7 @@ Check a test before trusting prose. The offline suite is the fastest way to lear
 | what does preflight actually check? | `tests/test_doctor.py` |
 | MCP job status inference | `tests/test_mcp.py` |
 | CLI parsing and the transcript decision | `tests/test_cli.py` |
+| Songcut audio, dedup, cloud recovery, live lyrics, CLI and MCP | `tests/test_songcut_*.py` |
 
 Live-network tests are marked `live` and excluded by default.
 

@@ -31,10 +31,54 @@ layout, host support and discovery troubleshooting.
 
 - 📝 **Original-language transcript** (Reuses trustworthy platform captions, or falls back to whisper.cpp)
 - 🖼️ **Per-frame visual notes** (OCR + figure/slide captions via a local vision model)
+- 🎵 **Song-cut production / 制作歌切** — audio cutting, recording deduplication, mastering/QC, optional cloud ASR and draft live lyrics.
 
 It starts at a URL and ends at `out/<sanitized_title> [<id>-p<part>]/` containing `bundle.md`, `bundle.json`, and `frames/`. It does **not** summarize or extract entities — that lives downstream in Atlas.
 
 See [SPEC.md](SPEC.md) for the design and [PROTOCOL.md](PROTOCOL.md) for the Atlas-facing contract.
+
+## 制作歌切 · Song-cut production
+
+`songcut` accepts local audio/video, a supported video URL or BV ID, or a JSON batch manifest.
+It downloads selected parts, applies explicit time ranges, checks for matching recordings, and
+exports 48 kHz stereo AAC with loudness/true-peak QC. The default mastering policy preserves
+dynamics with constant gain; `dynamic` explicitly enables two-pass loudness compression.
+
+Install the optional dependencies, then make a local clip:
+
+```bash
+uv pip install --python .venv/bin/python -e ".[songcut,mcp]"
+.venv/bin/blisolver songcut /path/to/source.wav --start 12 --end 200 --out out/my-song --json
+```
+
+For **cloud-assisted live lyrics**, configure `DASHSCOPE_API_KEY` in the local `.env` or secret
+environment, plus private S3-compatible storage as described in the
+[songcut guide](skills/blisolver-video-ingestion/references/songcut.md). Then:
+
+```bash
+.venv/bin/blisolver songcut /path/to/source.wav --backend dashscope --budget-cny 2 --out out/my-song --plan
+.venv/bin/blisolver songcut /path/to/source.wav --backend dashscope --budget-cny 2 --out out/my-song --json
+```
+
+The cloud chain includes **Filetrans full-file ASR → Flash short-window checks → Omni vocal
+presence candidates → word-indexed lyric curation → independent spoken-chat review**.
+`--title "Song title" --lookup-lyrics` optionally searches LRCLIB; `--reference-lyrics lyrics.txt`
+uses a local reference. Reference timing is never copied into the performance. Local whisper.cpp
+is available with `--backend whisper`; `none` (default) produces audio/QC without model calls.
+
+Each clip returns paths to `audio.m4a`, `lyrics.lrc`, `lyrics.txt`, `lyrics.json`, word evidence,
+`provenance.json`, `dedup.json`, `qc.json`, and its independent songcut `bundle.json`. Audio hashes
+bind lyrics to the exact playback file. All generated lyrics and vocal assessments remain
+**draft**; a complete processing job is not human listening approval. Album/cover/site publication
+stays downstream. Time ranges must be supplied when cutting a full concert; song boundaries and
+performer identity are not inferred automatically.
+
+Repeat the command with the same `--out` to resume. Paid submissions are persisted before polling;
+uncertain paid POSTs are not retried automatically. The budget uses configurable rate estimates,
+not a billing guarantee. Creating `STOP` inside the output root blocks new paid requests while
+already-submitted Filetrans tasks can still be collected. MCP exposes `make_songcut` / `get_songcut`.
+See the [guide](skills/blisolver-video-ingestion/references/songcut.md) for manifests, all flags,
+storage options, cost accounting and recovery.
 
 ## 🌟 Why a Dedicated Tool?
 

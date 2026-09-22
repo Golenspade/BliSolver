@@ -15,6 +15,7 @@ from ..player_api import (
     DanmakuFetch,
     ViewData,
     ViewError,
+    cid_for_part,
     fetch_danmaku,
     fetch_view,
     published_at_iso,
@@ -86,6 +87,8 @@ class BilibiliProvider:
             published_at=published_at_iso(view.pubdate),
             parts=max(len(view.pages), 1),
             part_durations_s=[pg.duration for pg in view.pages],
+            source_part_id=str(cid_for_part(view, canonical.part))
+            if cid_for_part(view, canonical.part) is not None else None,
             thumbnail_url=view.pic,
             # PLATFORM ASSUMPTION, NOT AN OBSERVATION. bilibili's view API reports no spoken
             # language, and nothing else here measures one, so `zh` is a default for a

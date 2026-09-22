@@ -29,6 +29,11 @@ dependencies = [
 frames = ["Pillow>=12", "imagehash>=4.3.2"]
 # step 5: vision captioning
 vision = ["openai>=2.44"]
+# Opt-in audio production and external ASR. S3 credentials use boto3's standard provider chain.
+songcut = [
+    "numpy>=1.26", "scipy>=1.12", "requests>=2.32", "boto3>=1.34",
+    "opencc-python-reimplemented>=0.1.7", "pypinyin>=0.50", "pykakasi>=2.3", "rapidfuzz>=3",
+]
 # Phase E: MCP interface layer (Agent-callable server)
 # MCPServer is the stable SDK 2.x API. Keep the next-major upper bound so a future incompatible
 # SDK release cannot silently break a fresh plugin install.
