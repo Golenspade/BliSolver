@@ -55,6 +55,7 @@ class SourceMetadata:
     danmaku_count: int | None = None    # bilibili-only
     subtitle_status: SubtitleDiscoveryStatus = "unknown"
     warnings: list[ProbeWarning] = field(default_factory=list)
+    source_part_id: str | None = None  # provider media revision identity, e.g. bilibili CID
 
 
 @dataclass

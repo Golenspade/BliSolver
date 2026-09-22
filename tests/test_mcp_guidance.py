@@ -108,7 +108,7 @@ def test_missing_wheel_guidance_degrades_without_breaking_tools(
 
     async def inspect() -> None:
         async with Client(build_server(_settings(tmp_path)), mode=mode) as client:
-            assert len((await client.list_tools()).tools) == 5
+            assert len((await client.list_tools()).tools) == 7
             result = await client.read_resource(guidance.GUIDANCE_URI)
             assert "complete BliSolver repository/plugin checkout" in result.contents[0].text
             assert "Python wheel alone" in result.contents[0].text
@@ -130,7 +130,7 @@ def test_skill_directory_symlink_cannot_escape_project(tmp_path: Path, monkeypat
         async with Client(build_server(_settings(tmp_path))) as client:
             result = await client.read_resource(guidance.GUIDANCE_URI)
             assert result.contents[0].text == guidance._MISSING_GUIDANCE
-            assert len((await client.list_tools()).tools) == 5
+            assert len((await client.list_tools()).tools) == 7
 
     asyncio.run(inspect())
 

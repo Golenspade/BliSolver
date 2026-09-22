@@ -1,6 +1,6 @@
 ---
 name: blisolver-video-ingestion
-description: Acquire bilibili.com or YouTube video transcripts and optional visual/OCR tracks with BliSolver. Use for runtime checks, probing, ingestion, provider troubleshooting, and Atlas bundle validation; interpretation belongs downstream.
+description: Acquire bilibili.com or YouTube transcripts and optional visual/OCR tracks with BliSolver, or use 制作歌切 to produce audio and draft live lyrics from videos/local media. Use for runtime checks, ingestion, cloud audio production, provider troubleshooting and artifact validation.
 license: MIT. LICENSE.txt has complete terms.
 compatibility: Requires the complete BliSolver checkout/plugin and Python 3.11+ with its dependencies. ASR needs ffmpeg, whisper-cli and GGML weights; vision and OCR have separate optional prerequisites. MCP clients may read guidance and runtime status through resources.
 metadata:
@@ -21,6 +21,7 @@ This file is the shared workflow. Do not preload every reference or script sourc
 
 | Current stage or need | Read before acting |
 |---|---|
+| 制作歌切: audio cutting, recording dedup, mastering, cloud ASR or live lyrics | [Songcut guide](references/songcut.md) |
 | Local CLI: first operation, flags, language, output fields | [CLI contract](references/cli-contract.md) |
 | MCP: first tool call, modes, polling and errors | [MCP contract](references/mcp-contract.md) |
 | Missing runtime, doctor warning, installation or recovery | [Operational runbook](references/operational-runbook.md) |

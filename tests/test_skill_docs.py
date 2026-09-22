@@ -98,6 +98,11 @@ def test_every_ingest_flag_is_documented(prose):
     )
 
 
+def test_every_songcut_flag_is_documented(prose):
+    _, surface = _cli_surface()
+    assert not sorted(flag for flag in surface["songcut"] if f"`{flag}" not in prose)
+
+
 def test_no_documented_flag_is_invented(prose):
     """The mirror image: prose must not offer flags the CLI will reject."""
     _, surface = _cli_surface()

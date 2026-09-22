@@ -220,3 +220,9 @@ Agent Plugins §7.2.2 requires a server that fails to start or connect not to in
 the plugin. A conformant client should therefore still discover and expose the Skill when the MCP
 server is unavailable. Running `scripts/blisolver_cli.py` still requires a usable BliSolver Python
 environment, because the Skill and MCP surfaces intentionally share that runtime.
+# Songcut tools
+
+`make_songcut(manifest, output?)` starts independent audio production; `get_songcut(job_id)` polls
+its persisted result. They share the existing start/poll rate limits and add no MCP Tasks extension.
+They may download media and call paid external models when explicitly selected in the manifest.
+Read [the songcut guide](songcut.md) for the manifest, artifacts, budget and recovery contract.

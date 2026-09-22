@@ -151,7 +151,7 @@ def test_available_subtitles_excludes_non_caption_tracks(monkeypatch):
         title, owner_name, owner_mid, desc, duration = "标题", "up", 1, "", 100
         pubdate, pic, view_count, like_count, coin_count = 0, "", 1, 1, 1
         favorite_count, share_count, reply_count, danmaku_count = 1, 1, 1, 1
-        pages = [type("P", (), {"duration": 100})()]
+        pages = [type("P", (), {"duration": 100, "part": 1, "cid": 1001})()]
 
     monkeypatch.setattr(biliprov, "fetch_view", lambda c, s, opener=None: _View())
     monkeypatch.setattr(

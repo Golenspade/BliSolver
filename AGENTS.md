@@ -4,6 +4,9 @@
 
 - BliSolver acquires and normalizes bilibili.com and YouTube videos into Atlas bundles.
 - Keep acquisition deterministic. Summarization, entity extraction, and other interpretation belong downstream in Atlas.
+- The opt-in `songcut` product also makes audio and draft live lyrics. Its cloud interpretation,
+  recording matches and vocal-presence candidates use independent artifacts, never Atlas's
+  authoritative transcript. Read `skills/blisolver-video-ingestion/references/songcut.md` for it.
 
 ## Operating This Repository
 
@@ -32,7 +35,7 @@ Use `skills/blisolver-video-ingestion/references/source-map.md` to locate the im
 
 ```bash
 uv venv .venv
-uv pip install --python .venv/bin/python -e ".[mcp,frames,vision,dev]"
+uv pip install --python .venv/bin/python -e ".[mcp,frames,vision,songcut,dev]"
 ```
 
 | Task | Command |

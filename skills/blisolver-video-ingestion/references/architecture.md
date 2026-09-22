@@ -29,7 +29,7 @@ way, and `tests/test_agent_plugin.py` plus `tests/test_portable_skill.py` fail w
 | Surface | Path | Nature |
 |---|---|---|
 | CLI | `blisolver/cli.py` | `ingest`, `probe`, `doctor`, `mcp` |
-| MCP | `blisolver/mcp/server.py` | five tools, async job store |
+| MCP | `blisolver/mcp/server.py`, `blisolver/songcut/mcp.py` | seven tools, persisted ingest/songcut jobs |
 | skill wrapper | `skills/*/scripts/blisolver_cli.py` | interpreter resolution plus pass-through |
 
 The two runtime surfaces share one interpreter-resolution chain, implemented once in

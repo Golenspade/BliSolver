@@ -124,6 +124,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("mcp", help="run the MCP server over stdio (Phase E Agent interface)")
 
+    from .songcut.cli import add_parser as add_songcut_parser
+    add_songcut_parser(sub)
+
     return p
 
 
@@ -483,6 +486,9 @@ def main(argv=None) -> int:
         pass
 
     args = parse_args(argv)
+    if args.command == "songcut":
+        from .songcut.cli import main as songcut_main
+        return songcut_main(args)
     if args.command == "probe":
         return _run_probe(args)
     if args.command == "doctor":
