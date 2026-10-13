@@ -1,9 +1,8 @@
-"""Safety guardrails, anti-banning measures, and strict read-only enforcement.
+"""Cooperative action-name checks and pacing for read-only acquisition.
 
-Guarantees:
-1. Strictly Consumer-Only (Read-Only): zero message-sending, voting, liking, or gifting APIs.
-2. Jittered rate limiting for status polling to prevent WAF / bot-fingerprinting.
-3. Clean browser header hygiene and credential masking.
+These checks are not a transport sandbox and do not guarantee account safety,
+WAF avoidance or compliance with platform terms. Callers and dependencies remain
+responsible for their actual HTTP/WebSocket operations.
 """
 
 from __future__ import annotations
@@ -41,7 +40,7 @@ AccountSecurityViolation = SafetyViolationError
 
 
 class SafetyGuard:
-    """Manages rate-limiting jitter and verifies TOS compliance boundaries."""
+    """Provides polling jitter and cooperative action-name checks."""
 
     def __init__(
         self,
@@ -57,7 +56,7 @@ class SafetyGuard:
         self._last_request_time: float = 0.0
 
     async def wait_jitter(self, min_s: float | None = None, max_s: float | None = None) -> float:
-        """Introduce randomized delay between room polling cycles to avoid bot signatures."""
+        """Introduce randomized delay between room polling cycles."""
         low = min_s if min_s is not None else self.min_interval
         high = max_s if max_s is not None else self.max_interval
         target_interval = random.uniform(low, high)

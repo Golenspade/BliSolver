@@ -76,8 +76,8 @@ class LiveMonitor:
         except (TimeoutError, aiohttp.ClientError) as exc:
             logger.warning("network error checking room %s: %s", self.room_id, exc)
             return {
-                "live_status": 0,
-                "is_live": False,
+                "live_status": None,
+                "is_live": None,
                 "real_room_id": self.room_id,
                 "title": "",
                 "anchor_uid": 0,

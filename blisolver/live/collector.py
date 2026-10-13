@@ -41,12 +41,14 @@ class LiveHandler(blivedm.BaseHandler):
         super().__init__()
         self.queue = event_queue
         self.listener = listener
+        self.overflow_count = 0
 
     def _dispatch(self, event: LiveEvent) -> None:
         try:
             self.queue.put_nowait(event)
         except asyncio.QueueFull:
-            logger.warning("Live event queue is full; dropping event: %s", event)
+            self.overflow_count += 1
+            logger.error("Live event queue overflow; session capture is incomplete")
 
         if self.listener:
             try:
@@ -80,8 +82,8 @@ class LiveHandler(blivedm.BaseHandler):
             color=getattr(message, "color", 0xFFFFFF),
             medal_name=getattr(message, "medal_name", None),
             medal_level=getattr(message, "medal_level", 0),
-            guard_level=getattr(message, "guard_level", 0),
-            is_admin=bool(getattr(message, "is_admin", False)),
+            guard_level=getattr(message, "privilege_type", 0),
+            is_admin=bool(getattr(message, "admin", False)),
             emoticon_url=getattr(message, "emoticon_url", None)
             or (message.emoticon_options.get("url") if isinstance(getattr(message, "emoticon_options", None), dict) else None),
         )
@@ -133,8 +135,9 @@ class LiveHandler(blivedm.BaseHandler):
     def _on_user_toast_v2(self, client: blivedm.BLiveClient, message: web_models.UserToastV2Message):
         SafetyGuard.assert_read_only("guard_received")
         guard_level = int(getattr(message, "guard_level", 3))
-        # Standard pricing: 1 Governor ~ 19998 CNY, 2 Admiral ~ 1998 CNY, 3 Captain ~ 198 CNY
-        pricing = {1: 19998.0, 2: 1998.0, 3: 198.0}
+        # Source 2 repeats the paid toast as a giveaway notice.
+        if getattr(message, "source", 0) == 2:
+            return
         num = int(getattr(message, "num", 1))
 
         record = LiveGuardRecord(
@@ -145,7 +148,7 @@ class LiveHandler(blivedm.BaseHandler):
             guard_level=guard_level if 1 <= guard_level <= 3 else 3,
             num=num,
             unit=getattr(message, "unit", "月"),
-            cny_value=pricing.get(guard_level, 198.0) * num,
+            cny_value=float(getattr(message, "price", 0)) * num / 1000.0,
         )
         self._dispatch(record)
 
@@ -167,6 +170,10 @@ class LiveCollector:
         self._session: aiohttp.ClientSession | None = None
         self._client: blivedm.BLiveClient | None = None
         self._handler = LiveHandler(self.queue, listener=self.listener)
+
+    @property
+    def overflow_count(self) -> int:
+        return self._handler.overflow_count
 
     def _init_session(self) -> aiohttp.ClientSession:
         cookies = http.cookies.SimpleCookie()
@@ -190,11 +197,13 @@ class LiveCollector:
 
     async def stop(self) -> None:
         """Gracefully disconnect and tear down network sessions."""
-        if self._client:
-            await self._client.stop_and_close()
+        try:
+            if self._client:
+                await self._client.stop_and_close()
+        finally:
             self._client = None
-        if self._session and not self._session.closed:
-            await self._session.close()
+            if self._session and not self._session.closed:
+                await self._session.close()
             self._session = None
         logger.info("LiveCollector stopped for room %d", self.room_id)
 

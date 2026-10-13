@@ -1,7 +1,7 @@
 """Full live session lifecycle orchestrator and post-stream aggregator.
 
 Manages:
-1. Streaming persistence to `events.jsonl` in real time (zero data loss on crash).
+1. Streaming persistence to `events.jsonl` with per-event flush.
 2. Live stream iteration (async generator) for downstream real-time consumers.
 3. Stream conclusion aggregation: monetization totals, viewer censuses, Top chatters.
 4. Final delivery bundles: `live-bundle.json` and human-readable `live-bundle.md`.
@@ -17,6 +17,8 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from pydantic import TypeAdapter
 
 from .collector import LiveCollector
 from .models import (
@@ -63,6 +65,10 @@ class LiveSession:
         self._room_info: dict[str, Any] = {}
         self._start_time: datetime | None = None
         self._end_time: datetime | None = None
+        self.poll_interval_s = 30.0
+        self._owns_output = False
+        self._capture_complete = True
+        self._dropped_event_count = 0
 
     @property
     def jsonl_path(self) -> Path:
@@ -79,23 +85,28 @@ class LiveSession:
     async def _event_writer_loop(self) -> None:
         """Background coroutine that continuously appends incoming events to JSONL."""
         self.out_dir.mkdir(parents=True, exist_ok=True)
-        with open(self.jsonl_path, "a", encoding="utf-8") as f:  # noqa: ASYNC230
+        with open(self.jsonl_path, "w", encoding="utf-8") as f:  # noqa: ASYNC230
             while self._is_active or not self.event_queue.empty():
                 try:
                     event = await asyncio.wait_for(self.event_queue.get(), timeout=1.0)
                 except TimeoutError:
                     continue
 
-                self._all_events.append(event)
                 line = json.dumps(event.model_dump(), ensure_ascii=False)
                 f.write(line + "\n")
                 f.flush()
+                self._all_events.append(event)
                 self.event_queue.task_done()
 
     async def start(self) -> dict[str, Any]:
         """Initiate session: wait for broadcaster to go live if configured, then connect."""
         SafetyGuard.assert_read_only("start_live_session")
         self.out_dir.mkdir(parents=True, exist_ok=True)
+        # Refuse ambiguous append/resume rather than mixing broadcasts.
+        if self.jsonl_path.exists():
+            raise FileExistsError(f"Session journal already exists: {self.jsonl_path}")
+        self.jsonl_path.touch(exist_ok=False)
+        self._owns_output = True
         self._monitor = LiveMonitor(self.room_id, safety=self.safety)
 
         if self.wait_for_live:
@@ -119,50 +130,105 @@ class LiveSession:
 
     async def stop(self) -> LiveSessionSummary:
         """Gracefully disconnect, flush pending stream events, and build delivery bundles."""
-        self._is_active = False
+        errors = []
+        if self._collector and self._collector.overflow_count:
+            self._dropped_event_count = self._collector.overflow_count
+            errors.append(RuntimeError("Live event queue overflow: capture is incomplete"))
+        # Stop the producer before allowing the writer to finish draining.
         if self._collector:
-            await self._collector.stop()
-            self._collector = None
-
+            try:
+                await self._collector.stop()
+            except Exception as exc:  # noqa: BLE001 - finish all cleanup, then re-raise
+                errors.append(exc)
+            finally:
+                self._collector = None
+        self._is_active = False
         if self._monitor:
-            await self._monitor.close()
-            self._monitor = None
-
+            try:
+                await self._monitor.close()
+            except Exception as exc:  # noqa: BLE001 - finish all cleanup, then re-raise
+                errors.append(exc)
+            finally:
+                self._monitor = None
         if self._writer_task:
-            await self._writer_task
-            self._writer_task = None
+            try:
+                await self._writer_task
+            except Exception as exc:  # noqa: BLE001 - finish all cleanup, then re-raise
+                errors.append(exc)
+            finally:
+                self._writer_task = None
 
         self._end_time = datetime.now(UTC)
+        if errors:
+            self._capture_complete = False
         summary = self.aggregate()
         self.write_bundles(summary)
+        if errors:
+            raise errors[0]
         return summary
 
     async def run(self) -> LiveSessionSummary:
         """Run the session lifecycle from start until stream ends or max_duration expires."""
-        await self.start()
+        failure = None
         try:
-            if self.max_duration_s:
-                await asyncio.sleep(self.max_duration_s)
-            else:
-                while True:
-                    await asyncio.sleep(30)
-                    info = await self._monitor.check_status()
-                    if not info["is_live"]:
-                        logger.info("Room %s stream has ended.", self.room_id)
-                        break
-        except (KeyboardInterrupt, asyncio.CancelledError):
-            logger.info("Session interrupted by user or cancellation.")
-        return await self.stop()
+            await self.start()
+            deadline = (
+                asyncio.get_running_loop().time() + self.max_duration_s
+                if self.max_duration_s is not None else None
+            )
+            while True:
+                remaining = deadline - asyncio.get_running_loop().time() if deadline else None
+                if remaining is not None and remaining <= 0:
+                    break
+                await asyncio.sleep(min(self.poll_interval_s, remaining)
+                                    if remaining is not None else self.poll_interval_s)
+                if self._writer_task.done():
+                    await self._writer_task
+                    raise RuntimeError("Live journal writer stopped unexpectedly")
+                if self._collector.overflow_count:
+                    raise RuntimeError("Live event queue overflow: capture is incomplete")
+                info = await self._monitor.check_status()
+                if info["is_live"] is False:
+                    break
+        except BaseException as exc:
+            self._capture_complete = False
+            failure = exc
+            raise
+        finally:
+            if self._owns_output:
+                try:
+                    summary = await self.stop()
+                except Exception:
+                    if failure is None:
+                        raise
+                    logger.exception("Cleanup failed while handling session failure")
+        return summary
 
     def stream(self) -> AsyncIterator[LiveEvent]:
-        """Expose an asynchronous iterator for downstream consumers processing events live."""
+        """Replay the session journal with an independent cursor per consumer.
+
+        Slow consumers never block collection or steal persistence events. Each
+        reader starts at the beginning and can finish draining after stop.
+        """
         async def _generator() -> AsyncIterator[LiveEvent]:
-            while self._is_active or not self.event_queue.empty():
-                try:
-                    event = await asyncio.wait_for(self.event_queue.get(), timeout=0.5)
-                    yield event
-                except TimeoutError:
-                    continue
+            adapter = TypeAdapter(LiveEvent)
+            while not self.jsonl_path.exists():
+                if not self._is_active:
+                    return
+                await asyncio.sleep(0.01)
+            with self.jsonl_path.open(encoding="utf-8") as journal:
+                while True:
+                    position = journal.tell()
+                    line = journal.readline()
+                    if line.endswith("\n"):
+                        yield adapter.validate_json(line)
+                    else:
+                        journal.seek(position)
+                        if not self._is_active and (
+                            self._writer_task is None or self._writer_task.done()
+                        ):
+                            break
+                        await asyncio.sleep(0.01)
         return _generator()
 
     def aggregate(self) -> LiveSessionSummary:
@@ -213,6 +279,8 @@ class LiveSession:
 
         return LiveSessionSummary(
             room_id=self.room_id,
+            capture_complete=self._capture_complete,
+            dropped_event_count=self._dropped_event_count,
             real_room_id=self._room_info.get("real_room_id", self.room_id),
             title=self._room_info.get("title", ""),
             anchor_name=self._room_info.get("raw", {}).get("uname", ""),
@@ -249,6 +317,8 @@ class LiveSession:
             f"# 直播数据会话报告: {summary.title or summary.room_id}",
             "",
             "## 基本信息",
+            f"- **采集完整**: {summary.capture_complete}",
+            f"- **队列溢出丢失事件数**: {summary.dropped_event_count}",
             f"- **房间号**: {summary.room_id} (实际长号: {summary.real_room_id})",
             f"- **主播 UID**: {summary.anchor_uid}",
             f"- **开播时间**: {summary.start_time}",

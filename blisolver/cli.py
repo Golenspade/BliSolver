@@ -136,7 +136,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--duration", type=float, default=None, help="maximum capture duration in seconds"
     )
     live_cmd.add_argument(
-        "--out", default=None, help="output directory for session bundle (default: ./out/live-<room_id>)"
+        "--out", default=None, help="output directory for session bundle (default: ./out/live-<room_id>-<session_id>)"
     )
     live_cmd.add_argument(
         "--sessdata", default=None, help="Bilibili SESSDATA cookie value (or set BLISOLVER_SESSDATA env var)"
@@ -521,7 +521,9 @@ def _run_live(args) -> int:
             return 1
         room_id = int(m.group(1))
 
-    out_dir = Path(args.out) if args.out else Path(f"./out/live-{room_id}")
+    from uuid import uuid4
+
+    out_dir = Path(args.out) if args.out else Path(f"./out/live-{room_id}-{uuid4().hex}")
     sessdata = args.sessdata or os.getenv("BLISOLVER_SESSDATA") or os.getenv("SESSDATA")
 
     session = LiveSession(

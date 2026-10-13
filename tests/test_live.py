@@ -20,6 +20,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from blisolver.cli import build_parser, parse_args
+
+pytest.importorskip("aiohttp")
+pytest.importorskip("blivedm")
+
 from blisolver.live.collector import LiveHandler
 from blisolver.live.models import (
     LiveDanmakuRecord,
@@ -449,6 +453,7 @@ class TestLiveSession:
         async def _test():
             session = LiveSession(room_id=999, out_dir=tmp_path)
             session._is_active = True
+            session._writer_task = asyncio.create_task(session._event_writer_loop())
 
             event = LiveDanmakuRecord(timestamp=1.0, room_id=999, uid=10, uname="Streamer", msg="Ping")
             await session.event_queue.put(event)
@@ -464,6 +469,8 @@ class TestLiveSession:
             await asyncio.wait_for(consume(), timeout=2.0)
             assert len(received) == 1
             assert received[0].msg == "Ping"
+            session._is_active = False
+            await session._writer_task
         asyncio.run(_test())
 
 

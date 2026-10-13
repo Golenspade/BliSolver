@@ -89,6 +89,9 @@ class LiveSessionSummary(LiveModel):
     end_time: str | None = Field(default=None, description="ISO 8601 completion timestamp")
     duration_s: float = Field(default=0.0, ge=0.0)
 
+    capture_complete: bool = True
+    dropped_event_count: int = Field(default=0, ge=0)
+
     # Core volume metrics
     total_danmaku_count: int = Field(default=0, ge=0)
     unique_danmaku_senders: int = Field(default=0, ge=0)
