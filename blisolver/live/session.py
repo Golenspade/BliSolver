@@ -69,6 +69,7 @@ class LiveSession:
         self._owns_output = False
         self._capture_complete = True
         self._dropped_event_count = 0
+        self._finished = False
 
     @property
     def jsonl_path(self) -> Path:
@@ -131,9 +132,6 @@ class LiveSession:
     async def stop(self) -> LiveSessionSummary:
         """Gracefully disconnect, flush pending stream events, and build delivery bundles."""
         errors = []
-        if self._collector and self._collector.overflow_count:
-            self._dropped_event_count = self._collector.overflow_count
-            errors.append(RuntimeError("Live event queue overflow: capture is incomplete"))
         # Stop the producer before allowing the writer to finish draining.
         if self._collector:
             try:
@@ -141,6 +139,11 @@ class LiveSession:
             except Exception as exc:  # noqa: BLE001 - finish all cleanup, then re-raise
                 errors.append(exc)
             finally:
+                if self._collector.overflow_count:
+                    self._dropped_event_count = self._collector.overflow_count
+                    errors.append(RuntimeError("Live event queue overflow: capture is incomplete"))
+                if self._collector.failure is not None:
+                    errors.append(self._collector.failure)
                 self._collector = None
         self._is_active = False
         if self._monitor:
@@ -158,6 +161,7 @@ class LiveSession:
             finally:
                 self._writer_task = None
 
+        self._finished = True
         self._end_time = datetime.now(UTC)
         if errors:
             self._capture_complete = False
@@ -185,6 +189,8 @@ class LiveSession:
                 if self._writer_task.done():
                     await self._writer_task
                     raise RuntimeError("Live journal writer stopped unexpectedly")
+                if self._collector.failure is not None:
+                    raise self._collector.failure
                 if self._collector.overflow_count:
                     raise RuntimeError("Live event queue overflow: capture is incomplete")
                 info = await self._monitor.check_status()
@@ -213,7 +219,7 @@ class LiveSession:
         async def _generator() -> AsyncIterator[LiveEvent]:
             adapter = TypeAdapter(LiveEvent)
             while not self.jsonl_path.exists():
-                if not self._is_active:
+                if self._finished:
                     return
                 await asyncio.sleep(0.01)
             with self.jsonl_path.open(encoding="utf-8") as journal:
@@ -224,7 +230,7 @@ class LiveSession:
                         yield adapter.validate_json(line)
                     else:
                         journal.seek(position)
-                        if not self._is_active and (
+                        if self._finished and (
                             self._writer_task is None or self._writer_task.done()
                         ):
                             break

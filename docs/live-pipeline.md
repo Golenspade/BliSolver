@@ -60,3 +60,50 @@ Original PR head: `cc63fa5754d502091594ff723130a75473c9197b`.
 Replay includes cancellation, collector startup failure, secondary cleanup failure
 without masking the original exception, and post-stop consumer drain. Partial bundles
 expose `capture_complete=false`; ingress overflow also exposes `dropped_event_count`.
+
+## Independent Codex review follow-up
+
+The reviewer reproduced two additional defects against the first repair:
+
+1. A consumer racing with delayed room status detection saw an empty journal and
+   exited before collection started. Readers now wait through startup and only finish
+   after the explicit `_finished` state is set following producer shutdown and drain.
+2. The pinned upstream client catches fatal network-task exceptions and calls
+   `on_client_stopped`; these were invisible to the session. The handler now records
+   fatal termination, and run/stop propagate it and mark the bundle incomplete.
+   Expected healthy producer shutdown is distinguished from fatal termination.
+
+New regressions start the consumer before `run`, hold room status detection, then
+verify it receives the later event; inject a fatal task into the actual pinned
+BLiveClient wrapper without opening a connection; enqueue the final event during
+producer shutdown; and overflow a capacity-one queue then check the delivered
+journal, dropped count, failed outcome and partial bundle. Independent reviewer
+reran all live tests: **33 passed** (one upstream aiohttp deprecation warning).
+Plugin/MCP/packaging/skill contract tests: **107 passed**. Source and wheel rebuild
+and touched-code Ruff pass.
+
+The seven unrelated main-baseline failures have these precise assertions:
+
+- `test_forced_asr_fails_before_resolve_files_or_subprocess[binary-auto]` and
+  `[binary-legacy]`: expect `whisper-cli missing` in tool error text.
+- The same test's `[model-auto]` and `[model-legacy]`: expect
+  `whisper-model missing` in tool error text.
+- The same test's `[both-auto]` and `[both-legacy]`: first expect
+  `whisper-cli missing` (and then also the model diagnostic).
+- `test_invalid_mode_and_start_rate_limit_do_not_launch_work`: expects
+  `retry after` in the rejected fifth call's error text.
+
+All receive generic `Error executing tool extract_transcript` instead: existing
+handlers raise ordinary ValueError/runtime errors, which installed MCP 2.3.0 wraps
+as UnexpectedToolError and masks. is_error rejection still occurs. The live CLI,
+collector and session do not call extract_transcript or modify its handlers, ASR
+preflight, call budget, MCP SDK dependency or these tests. The identical untouched
+main reproduction establishes these as unrelated existing diagnostic defects.
+They are not silently counted as passing and do not require unrelated repairs in
+this live acquisition PR.
+
+Final applicable full offline run: **732 passed, 11 deselected, one upstream
+warning**. The 11 deselections comprise the seven explicitly documented main
+baseline failures above and four opt-in external live tests. No other offline
+tests were excluded. This supports the independent no-blocking-findings review;
+it does not claim the unchanged main diagnostic failures have been fixed.

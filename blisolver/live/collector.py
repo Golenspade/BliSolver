@@ -42,6 +42,15 @@ class LiveHandler(blivedm.BaseHandler):
         self.queue = event_queue
         self.listener = listener
         self.overflow_count = 0
+        self.failure: Exception | None = None
+        self.stopping = False
+
+    def on_client_stopped(
+        self, client: blivedm.BLiveClient, exception: Exception | None
+    ) -> None:
+        """Surface fatal upstream termination; normal requested shutdown is expected."""
+        if exception is not None or not self.stopping:
+            self.failure = exception or RuntimeError("Live collector stopped unexpectedly")
 
     def _dispatch(self, event: LiveEvent) -> None:
         try:
@@ -175,6 +184,10 @@ class LiveCollector:
     def overflow_count(self) -> int:
         return self._handler.overflow_count
 
+    @property
+    def failure(self) -> Exception | None:
+        return self._handler.failure
+
     def _init_session(self) -> aiohttp.ClientSession:
         cookies = http.cookies.SimpleCookie()
         if self.sessdata:
@@ -197,6 +210,7 @@ class LiveCollector:
 
     async def stop(self) -> None:
         """Gracefully disconnect and tear down network sessions."""
+        self._handler.stopping = True
         try:
             if self._client:
                 await self._client.stop_and_close()
