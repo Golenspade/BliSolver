@@ -10,6 +10,7 @@ blisolver ingest <url> [flags]
 blisolver probe  <url>
 blisolver doctor [--json]
 blisolver mcp
+blisolver live   <room_id> [flags]
 ```
 
 There is no bare-URL form; a URL without a verb is an argument error.
@@ -28,6 +29,7 @@ both of which must precede the verb: `--plugin-root PATH` and `--show-command`.
 | `doctor` | one JSON object with `--json`, otherwise a grouped report | nothing |
 | `ingest` | one result envelope with `--json`, otherwise **nothing** | all progress, warnings, notes |
 | `mcp` | JSON-RPC only | server logs |
+| `live` | one session summary JSON object with `--json`, otherwise **nothing** | all progress, notes |
 
 Progress used to share stdout with machine output. It no longer does, and that is load-bearing: it
 is what makes `ingest --json` parseable and what keeps the MCP stdio transport clean.
@@ -51,6 +53,16 @@ is what makes `ingest --json` parseable and what keeps the MCP stdio transport c
 | `--ocr` | detect and OCR burned-in subtitles into an independent track |
 | `--force-ocr` | with `--ocr`, skip pre-detection and always run the dense sample |
 | `--json` | emit the result envelope on stdout |
+
+## `live` flags
+
+| Flag | Effect |
+|---|---|
+| `--wait` | wait until stream goes live if currently offline |
+| `--duration SEC` | maximum capture duration in seconds |
+| `--out PATH` | output root directory (default: `./out/live-<room_id>`) |
+| `--sessdata STR` | Bilibili SESSDATA cookie value (or set `BLISOLVER_SESSDATA` / `SESSDATA`) |
+| `--json` | emit session summary and bundle paths on stdout |
 
 ## Choosing a transcript-only command
 

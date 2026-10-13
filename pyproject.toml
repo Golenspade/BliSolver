@@ -38,6 +38,11 @@ songcut = [
 # MCPServer is the stable SDK 2.x API. Keep the next-major upper bound so a future incompatible
 # SDK release cannot silently break a fresh plugin install.
 mcp = ["mcp>=2.0,<3"]
+# Live streaming acquisition & real-time events
+live = [
+    "aiohttp>=3.9.0",
+    "blivedm @ git+https://github.com/xfgryujk/blivedm.git@3bf17fe862b8c2fc6bc04c81c3f0c5db95de93d6",
+]
 dev = ["pytest>=8", "jsonschema>=4.20", "ruff>=0.6"]
 
 [project.scripts]
@@ -53,3 +58,6 @@ markers = ["live: hits the network against a real public video (opt in with -m l
 
 [tool.ruff]
 line-length = 99
+
+[tool.hatch.metadata]
+allow-direct-references = true

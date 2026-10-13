@@ -124,6 +124,28 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("mcp", help="run the MCP server over stdio (Phase E Agent interface)")
 
+    live_cmd = sub.add_parser(
+        "live",
+        help="monitor and acquire live stream interactions (danmaku, gifts, superchat, guards)",
+    )
+    live_cmd.add_argument("room_id", help="live room ID or live URL (e.g. 21452505 or https://live.bilibili.com/21452505)")
+    live_cmd.add_argument(
+        "--wait", action="store_true", help="wait until stream goes live if currently offline"
+    )
+    live_cmd.add_argument(
+        "--duration", type=float, default=None, help="maximum capture duration in seconds"
+    )
+    live_cmd.add_argument(
+        "--out", default=None, help="output directory for session bundle (default: ./out/live-<room_id>-<session_id>)"
+    )
+    live_cmd.add_argument(
+        "--sessdata", default=None, help="Bilibili SESSDATA cookie value (or set BLISOLVER_SESSDATA env var)"
+    )
+    live_cmd.add_argument(
+        "--json", action="store_true", dest="as_json",
+        help="emit one JSON object on stdout with session summary and bundle paths",
+    )
+
     from .songcut.cli import add_parser as add_songcut_parser
     add_songcut_parser(sub)
 
@@ -479,6 +501,77 @@ def _emit_ingest_result(canonical: Canonical, results) -> None:
     }, ensure_ascii=False))
 
 
+def _run_live(args) -> int:
+    """`live` verb: monitor and acquire live room interactions into bundles."""
+    import asyncio
+    import os
+    import re
+    from pathlib import Path
+
+    from .live import LiveSession
+
+    raw = str(args.room_id).strip()
+    m = re.search(r"live\.bilibili\.com/(?:blanc/)?(\d+)", raw)
+    if m:
+        room_id = int(m.group(1))
+    else:
+        m = re.search(r"\b(\d+)\b", raw)
+        if not m:
+            _log(f"error: invalid room ID or URL: {args.room_id}")
+            return 1
+        room_id = int(m.group(1))
+
+    from uuid import uuid4
+
+    out_dir = Path(args.out) if args.out else Path(f"./out/live-{room_id}-{uuid4().hex}")
+    sessdata = args.sessdata or os.getenv("BLISOLVER_SESSDATA") or os.getenv("SESSDATA")
+
+    session = LiveSession(
+        room_id=room_id,
+        out_dir=out_dir,
+        sessdata=sessdata,
+        wait_for_live=getattr(args, "wait", False),
+        max_duration_s=getattr(args, "duration", None),
+    )
+
+    _log(f"Starting live monitoring for room {room_id} (output: {out_dir})...")
+    try:
+        summary = asyncio.run(session.run())
+    except KeyboardInterrupt:
+        _log("\nLive monitoring cancelled by user.")
+        return 0
+    except Exception as exc:  # noqa: BLE001
+        _log(f"error: live monitoring failed: {exc}")
+        return 1
+
+    if getattr(args, "as_json", False):
+        print(json.dumps({
+            "schema_version": SCHEMA_VERSION,
+            "platform": "bilibili",
+            "room_id": room_id,
+            "real_room_id": summary.real_room_id,
+            "ok": True,
+            "bundle_dir": str(out_dir.resolve()),
+            "bundle_json": str(session.bundle_json_path.resolve()),
+            "bundle_md": str(session.bundle_md_path.resolve()),
+            "events_jsonl": str(session.jsonl_path.resolve()),
+            "summary": summary.model_dump(),
+        }, ensure_ascii=False))
+    else:
+        _log("\nLive session completed:")
+        _log(f"  Room ID: {summary.room_id} (Real: {summary.real_room_id})")
+        _log(f"  Anchor: {summary.anchor_name} (UID: {summary.anchor_uid})")
+        _log(f"  Danmaku count: {summary.total_danmaku_count} (Unique senders: {summary.unique_danmaku_senders})")
+        _log(
+            f"  Monetization: ¥{summary.total_monetization_cny:.2f} "
+            f"(Gifts: ¥{summary.total_gold_cny:.2f}, SC: ¥{summary.total_super_chat_cny:.2f}, "
+            f"Guards: ¥{summary.total_guard_cny:.2f})"
+        )
+        _log(f"  Bundle saved to: {out_dir}")
+
+    return 0
+
+
 def main(argv=None) -> int:
     try:
         sys.stdout.reconfigure(encoding="utf-8")  # CJK titles on Windows consoles
@@ -489,6 +582,8 @@ def main(argv=None) -> int:
     if args.command == "songcut":
         from .songcut.cli import main as songcut_main
         return songcut_main(args)
+    if args.command == "live":
+        return _run_live(args)
     if args.command == "probe":
         return _run_probe(args)
     if args.command == "doctor":
